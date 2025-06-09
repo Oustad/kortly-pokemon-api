@@ -1,0 +1,404 @@
+# Pokemon Card Scanner - Product Requirements Document v6.0
+==============================================================================
+
+## PROJECT OVERVIEW
+================
+PRD v6.0 focuses on production readiness, deployment optimization, and quality-of-life improvements for the Pokemon Card Scanner. The core functionality is feature-complete; this iteration enhances configurability, deployment options, and user experience refinements.
+
+## EXECUTIVE SUMMARY
+==================
+Based on the successful implementation in PRD v5.0, we now have a production-ready Pokemon Card Scanner. PRD v6.0 addresses the final aspects needed for robust production deployment: comprehensive configuration management, mobile camera integration, deployment documentation, and operational improvements.
+
+## CURRENT STATE ANALYSIS
+========================
+✅ **Completed Features**:
+- Gemini 2.5 Flash AI identification 
+- Pokemon TCG database integration
+- Multi-format image support (HEIC, JPEG, PNG)
+- Real-time cost tracking
+- Processed image viewing for testing
+- Clean web interface with HEIC support
+- Docker containerization
+- Comprehensive API documentation
+
+🎯 **Refinement Areas**:
+- Configuration management (hardcoded values)
+- Mobile camera integration
+- Production deployment guidance
+- Operational monitoring and observability
+
+## REQUIREMENTS FOR V6.0
+========================
+
+### 1. COMPREHENSIVE CONFIGURATION MANAGEMENT
+**Objective**: Make all key parameters configurable via environment variables
+
+#### **1.1 Gemini AI Configuration**
+```bash
+# Current hardcoded values → Environment variables
+GEMINI_MODEL=models/gemini-2.5-flash-preview-05-20
+GEMINI_MAX_TOKENS=2000
+GEMINI_TEMPERATURE=0.1
+GEMINI_MAX_RETRIES=3
+```
+
+#### **1.2 Image Processing Configuration** 
+```bash
+# Current ImageProcessor defaults → Configurable
+IMAGE_MAX_DIMENSION=1024
+IMAGE_JPEG_QUALITY=85
+IMAGE_MAX_FILE_SIZE_MB=10
+IMAGE_MIN_DIMENSION=400
+```
+
+#### **1.3 Caching and Performance**
+```bash
+# TCG API and general caching
+CACHE_ENABLED=true
+CACHE_TTL_SECONDS=3600
+CACHE_MAX_ENTRIES=1000
+
+# Rate limiting
+RATE_LIMIT_PER_MINUTE=60
+RATE_LIMIT_BURST=20
+```
+
+#### **1.4 Operational Settings**
+```bash
+# Logging and monitoring
+LOG_LEVEL=INFO
+ENABLE_METRICS=true
+METRICS_PORT=9090
+
+# Security and CORS
+CORS_ORIGINS=*
+ALLOWED_HOSTS=*
+ENABLE_API_DOCS=true
+
+# Health checks
+HEALTH_CHECK_INTERVAL=30
+STARTUP_TIMEOUT=60
+```
+
+#### **1.5 Development vs Production Modes**
+```bash
+# Environment mode
+ENVIRONMENT=production  # development, staging, production
+DEBUG=false
+
+# Static file serving
+SERVE_STATIC_FILES=true  # Disable for production with separate static server
+STATIC_FILE_CACHE_AGE=86400
+```
+
+### 2. MOBILE CAMERA INTEGRATION
+**Objective**: Enable direct photo capture on mobile devices
+
+#### **2.1 Camera API Integration**
+- **Feature**: Add camera capture button for mobile users
+- **Implementation**: HTML5 `getUserMedia()` API with fallback
+- **UX**: Show camera option only on mobile devices
+- **Privacy**: Request camera permission only when needed
+
+#### **2.2 Mobile Detection and UI**
+```javascript
+// Auto-detect mobile and show appropriate options
+if (isMobileDevice()) {
+    showCameraOption();
+} else {
+    showFileUploadOnly();
+}
+```
+
+#### **2.3 Camera Interface Design**
+- **Capture button** with live camera preview
+- **Multiple photo** capture with selection
+- **Image quality settings** optimized for card scanning
+- **Seamless integration** with existing upload flow
+
+### 3. COMPREHENSIVE DEPLOYMENT DOCUMENTATION
+**Objective**: Production-ready deployment guides for multiple platforms
+
+#### **3.1 Deployment Options Structure**
+```markdown
+# DEPLOYMENT.md sections:
+
+## Quick Start (Local Development)
+## Docker Deployment 
+## Docker Compose (with/without web interface)
+## Kubernetes Deployment
+## Google Cloud Platform
+  - Cloud Run (serverless)
+  - Google Kubernetes Engine (GKE) 
+  - Compute Engine (VM-based)
+  - App Engine (managed platform)
+## AWS Deployment
+  - ECS/Fargate
+  - EKS
+  - EC2
+## Production Considerations
+  - Load balancing
+  - SSL/TLS setup
+  - Monitoring and logging
+  - Backup strategies
+```
+
+#### **3.2 Configuration Templates**
+- **Environment files** for each deployment type
+- **Docker compose variants** (minimal, full-featured, production)
+- **Kubernetes manifests** (deployment, service, ingress)
+- **CI/CD pipeline examples** (GitHub Actions, GitLab CI)
+
+#### **3.3 Scaling and Performance**
+- **Horizontal scaling** strategies
+- **Resource requirements** (CPU, memory, storage)
+- **Performance tuning** guidelines
+- **Cost optimization** recommendations
+
+### 4. QUALITY-OF-LIFE IMPROVEMENTS
+**Objective**: Enhance operational excellence without expanding core functionality
+
+#### **4.1 Enhanced Error Handling**
+- **Structured error responses** with error codes
+- **Retry mechanisms** with exponential backoff
+- **Circuit breaker patterns** for external APIs
+- **Graceful degradation** when services are unavailable
+
+#### **4.2 Observability and Monitoring**
+```python
+# Metrics to expose
+- Request count and latency
+- Gemini API success/failure rates
+- TCG API response times
+- Image processing times
+- Cache hit/miss ratios
+- Cost per request
+```
+
+#### **4.3 Performance Optimizations**
+- **Image processing pipeline** optimization
+- **Response caching** for common queries
+- **Static asset optimization** (CSS/JS minification)
+- **Memory usage optimization** for large images
+
+#### **4.4 Security Enhancements**
+- **Input validation** hardening
+- **Rate limiting** per IP address
+- **API key rotation** support
+- **Security headers** implementation
+- **Content Security Policy** configuration
+
+#### **4.5 Developer Experience**
+- **Development containers** (devcontainer.json)
+- **Hot reload** configuration for development
+- **Debug logging** modes
+- **API testing** collection updates
+- **Code quality** tooling integration
+
+## IMPLEMENTATION PLAN
+====================
+
+### Phase 1: Configuration Management (Week 1)
+**Tasks**:
+1. **Update environment variables**
+   - Add all configurable parameters to .env.example
+   - Update services to read from environment
+   - Add validation for required variables
+   - Update Docker configurations
+
+2. **Configuration validation**
+   - Add startup checks for required variables
+   - Provide clear error messages for missing config
+   - Add configuration documentation
+
+### Phase 2: Mobile Camera Integration (Week 1)
+**Tasks**:
+1. **Camera API implementation**
+   - Add mobile detection
+   - Implement camera capture UI
+   - Add permission handling
+   - Test across mobile browsers
+
+2. **UI/UX integration**
+   - Update mobile styles
+   - Add camera capture flow
+   - Maintain existing upload functionality
+
+### Phase 3: Deployment Documentation (Week 2)
+**Tasks**:
+1. **Create DEPLOYMENT.md**
+   - Write comprehensive deployment guide
+   - Create configuration templates
+   - Add platform-specific instructions
+   - Include troubleshooting sections
+
+2. **Docker optimization**
+   - Multi-stage builds for production
+   - Security scanning integration
+   - Size optimization
+   - Health check improvements
+
+### Phase 4: Quality Improvements (Week 2)
+**Tasks**:
+1. **Observability**
+   - Add metrics collection
+   - Implement structured logging
+   - Add health check endpoints
+   - Create monitoring dashboards
+
+2. **Performance and security**
+   - Optimize image processing
+   - Implement security headers
+   - Add rate limiting
+   - Performance testing
+
+## CONFIGURATION REFERENCE
+========================
+
+### Complete .env.example
+```bash
+# Core API Configuration
+GOOGLE_API_KEY=your-gemini-api-key-here
+POKEMON_TCG_API_KEY=optional-for-higher-rate-limits
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000
+ENVIRONMENT=production
+DEBUG=false
+
+# Gemini AI Configuration
+GEMINI_MODEL=models/gemini-2.5-flash-preview-05-20
+GEMINI_MAX_TOKENS=2000
+GEMINI_TEMPERATURE=0.1
+GEMINI_MAX_RETRIES=3
+GEMINI_TIMEOUT_SECONDS=60
+
+# Image Processing Configuration
+IMAGE_MAX_DIMENSION=1024
+IMAGE_JPEG_QUALITY=85
+IMAGE_MAX_FILE_SIZE_MB=10
+IMAGE_MIN_DIMENSION=400
+
+# Caching Configuration
+CACHE_ENABLED=true
+CACHE_TTL_SECONDS=3600
+CACHE_MAX_ENTRIES=1000
+
+# Rate Limiting
+RATE_LIMIT_PER_MINUTE=60
+RATE_LIMIT_BURST=20
+RATE_LIMIT_ENABLED=true
+
+# Security Configuration
+CORS_ORIGINS=*
+ALLOWED_HOSTS=*
+ENABLE_API_DOCS=true
+API_KEY_HEADER=X-API-Key
+
+# Monitoring and Logging
+LOG_LEVEL=INFO
+ENABLE_METRICS=true
+METRICS_PORT=9090
+ENABLE_COST_TRACKING=true
+
+# Static Files
+SERVE_STATIC_FILES=true
+STATIC_FILE_CACHE_AGE=86400
+
+# Health Checks
+HEALTH_CHECK_INTERVAL=30
+STARTUP_TIMEOUT=60
+SHUTDOWN_TIMEOUT=30
+```
+
+## DEPLOYMENT SCENARIOS
+=====================
+
+### Scenario 1: Cloud Run (Serverless)
+- **Use case**: Low to medium traffic, cost optimization
+- **Configuration**: Minimal resource allocation, cold start optimization
+- **Benefits**: Auto-scaling, pay-per-use, minimal ops overhead
+
+### Scenario 2: GKE (Kubernetes)
+- **Use case**: High traffic, enterprise deployment
+- **Configuration**: Horizontal pod autoscaling, ingress controllers
+- **Benefits**: Full control, enterprise features, multi-zone deployment
+
+### Scenario 3: Compute Engine (VM)
+- **Use case**: Simple deployment, full control
+- **Configuration**: Docker compose with nginx reverse proxy
+- **Benefits**: Simple setup, predictable costs, easy debugging
+
+### Scenario 4: API-Only Deployment
+- **Use case**: Integration with existing frontend
+- **Configuration**: Disable static file serving, API-only mode
+- **Benefits**: Lightweight, focused on API functionality
+
+## SUCCESS METRICS
+=================
+
+### Configuration Completeness
+- ✅ All hardcoded values moved to environment variables
+- ✅ Default values work out of the box
+- ✅ Clear documentation for each setting
+- ✅ Validation and error messages for invalid config
+
+### Mobile Experience
+- ✅ Camera capture works on iOS Safari and Android Chrome
+- ✅ Responsive design maintains usability
+- ✅ Photo quality suitable for card recognition
+- ✅ Seamless integration with existing flow
+
+### Deployment Success
+- ✅ One-command deployment for each platform
+- ✅ Clear documentation with working examples
+- ✅ Production-ready configurations
+- ✅ Monitoring and observability setup
+
+### Operational Excellence
+- ✅ Sub-2-second response times maintained
+- ✅ 99.9% uptime in production deployments
+- ✅ Clear error messages and debugging information
+- ✅ Automated scaling and recovery
+
+## DELIVERABLES
+==============
+
+### Week 1
+- [ ] Enhanced .env configuration system
+- [ ] Mobile camera integration
+- [ ] Updated Docker configurations
+
+### Week 2
+- [ ] Comprehensive DEPLOYMENT.md
+- [ ] Production deployment templates
+- [ ] Monitoring and observability features
+- [ ] Security and performance improvements
+
+## RISK MITIGATION
+==================
+
+### Configuration Risks
+- **Risk**: Breaking changes from environment variable changes
+- **Mitigation**: Maintain backward compatibility, clear migration guide
+
+### Mobile Camera Risks
+- **Risk**: Browser compatibility issues
+- **Mitigation**: Progressive enhancement, fallback to file upload
+
+### Deployment Complexity
+- **Risk**: Documentation becomes outdated
+- **Mitigation**: Automated testing of deployment procedures
+
+## LONG-TERM VISION
+==================
+
+PRD v6.0 represents the final phase of the Pokemon Card Scanner development, focusing on operational excellence and production readiness. After v6.0:
+
+- **Maintenance mode**: Focus on bug fixes and security updates
+- **Community**: Open source contribution guidelines
+- **Extensions**: Plugin system for additional card games
+- **Enterprise**: Advanced features for commercial use
+
+The system will be production-ready with comprehensive documentation, flexible configuration, and robust deployment options across multiple cloud platforms.
