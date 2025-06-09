@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokemon Card Scanner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎴 Pokemon Card Scanner</h1>
+            <p class="subtitle">AI-powered Pokemon card identification using Gemini 2.5 Flash</p>
+        </header>
+        
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📷</div>
+                <h2>Upload Card Image</h2>
+                <p>Drag & drop or click to browse</p>
+                <input type="file" id="imageInput" accept="image/*,.heic,.heif" hidden>
+                <button class="btn-primary" onclick="document.getElementById('imageInput').click()">
+                    Choose Image
+                </button>
+            </div>
+            
+            <div class="options-panel" id="optionsPanel" style="display: none;">
+                <h3>Scan Options</h3>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="optimizeSpeed" checked>
+                    <span>Optimize for speed</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="trackCost" checked>
+                    <span>Track API costs</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="preview-section" id="previewSection" style="display: none;">
+            <div class="preview-card">
+                <h3>Selected Image</h3>
+                <img id="imagePreview" alt="Card preview">
+                <p id="fileName" class="file-name"></p>
+            </div>
+            
+            <div class="action-section">
+                <button class="btn-scan" id="scanBtn" onclick="scanCard()">
+                    <span class="scan-icon">🔍</span>
+                    Scan Card
+                </button>
+                <button class="btn-secondary" onclick="resetUpload()">
+                    Choose Different Image
+                </button>
+            </div>
+        </div>
+        
+        <div class="loading-section" id="loadingSection" style="display: none;">
+            <div class="spinner"></div>
+            <p>Scanning your Pokemon card...</p>
+            <p class="loading-status" id="loadingStatus">Processing image...</p>
+        </div>
+        
+        <div class="results-section" id="resultsSection" style="display: none;">
+            <!-- Performance Summary -->
+            <div class="result-card summary-card">
+                <h3>📊 Scan Summary</h3>
+                <div class="summary-grid" id="summaryGrid"></div>
+            </div>
+            
+            <!-- Card Identification -->
+            <div class="result-card" id="identificationCard">
+                <h3>🤖 AI Identification</h3>
+                <div id="geminiResult"></div>
+            </div>
+            
+            <!-- TCG Matches -->
+            <div class="result-card" id="matchesCard">
+                <h3>🎯 Database Matches</h3>
+                <div id="tcgMatches"></div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="actions-section">
+                <button class="btn-primary" onclick="resetUpload()">
+                    Scan Another Card
+                </button>
+            </div>
+        </div>
+        
+        <div class="error-section" id="errorSection" style="display: none;">
+            <div class="error-card">
+                <h3>❌ Error</h3>
+                <p id="errorMessage"></p>
+                <button class="btn-secondary" onclick="resetUpload()">
+                    Try Again
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <footer>
+        <p>Powered by Google Gemini AI & Pokemon TCG API</p>
+        <p><a href="/api/v1/docs" target="_blank">API Documentation</a></p>
+    </footer>
+    
+    <script src="script.js"></script>
+</body>
+</html>
