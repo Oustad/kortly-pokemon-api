@@ -50,10 +50,34 @@ function handleDrop(event) {
 function processFile(file) {
     selectedFile = file;
     
-    // Show preview
+    // Check if it's a HEIC file
+    const isHeic = file.name.toLowerCase().endsWith('.heic') || 
+                   file.name.toLowerCase().endsWith('.heif') ||
+                   file.type === 'image/heic' ||
+                   file.type === 'image/heif';
+    
+    if (isHeic) {
+        // For HEIC files, show a placeholder since browsers can't preview them
+        showHeicPreview(file);
+    } else {
+        // For other image formats, show normal preview
+        showImagePreview(file);
+    }
+}
+
+function showImagePreview(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
-        document.getElementById('imagePreview').src = e.target.result;
+        const imagePreview = document.getElementById('imagePreview');
+        imagePreview.src = e.target.result;
+        imagePreview.style.display = 'block';
+        
+        // Hide HEIC placeholder if it was shown
+        const heicPlaceholder = document.getElementById('heicPlaceholder');
+        if (heicPlaceholder) {
+            heicPlaceholder.style.display = 'none';
+        }
+        
         document.getElementById('fileName').textContent = file.name;
         
         // Show preview section and options
@@ -64,6 +88,44 @@ function processFile(file) {
         document.getElementById('uploadArea').style.display = 'none';
     };
     reader.readAsDataURL(file);
+}
+
+function showHeicPreview(file) {
+    // Hide the regular image preview
+    const imagePreview = document.getElementById('imagePreview');
+    imagePreview.style.display = 'none';
+    
+    // Create or show HEIC placeholder
+    let heicPlaceholder = document.getElementById('heicPlaceholder');
+    if (!heicPlaceholder) {
+        heicPlaceholder = document.createElement('div');
+        heicPlaceholder.id = 'heicPlaceholder';
+        heicPlaceholder.className = 'heic-placeholder';
+        heicPlaceholder.innerHTML = `
+            <div class="heic-icon">📷</div>
+            <div class="heic-text">
+                <h4>HEIC Image Selected</h4>
+                <p>iPhone photos can't be previewed in browsers, but they work perfectly for scanning!</p>
+                <p class="heic-tip">💡 Your HEIC image will be automatically converted during processing</p>
+            </div>
+        `;
+        
+        // Insert after the h3 in preview-card
+        const previewCard = document.querySelector('.preview-card');
+        const h3 = previewCard.querySelector('h3');
+        h3.insertAdjacentElement('afterend', heicPlaceholder);
+    }
+    
+    heicPlaceholder.style.display = 'flex';
+    
+    document.getElementById('fileName').textContent = file.name;
+    
+    // Show preview section and options
+    document.getElementById('previewSection').style.display = 'block';
+    document.getElementById('optionsPanel').style.display = 'block';
+    
+    // Hide upload area
+    document.getElementById('uploadArea').style.display = 'none';
 }
 
 // Scan card

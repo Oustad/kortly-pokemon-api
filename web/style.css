@@ -213,6 +213,50 @@ header h1 {
     font-size: 0.9rem;
 }
 
+/* HEIC Placeholder */
+.heic-placeholder {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 30px;
+    background: linear-gradient(135deg, #F3F4F6, #E5E7EB);
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.heic-icon {
+    font-size: 3rem;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.heic-text {
+    flex: 1;
+}
+
+.heic-text h4 {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+
+.heic-text p {
+    margin: 5px 0;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.heic-tip {
+    background: #F0F9FF;
+    color: var(--primary-color);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-top: 10px !important;
+}
+
 .action-section {
     display: flex;
     gap: 15px;
@@ -458,6 +502,16 @@ footer a:hover {
     
     .match-image img {
         width: 150px;
+    }
+    
+    .heic-placeholder {
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .heic-icon {
+        font-size: 2.5rem;
     }
 }
 
