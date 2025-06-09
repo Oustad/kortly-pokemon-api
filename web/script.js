@@ -190,11 +190,70 @@ function displayResults(data) {
     // Display summary
     displaySummary(data);
     
+    // Display processed images for comparison
+    displayProcessedImages(data.processing_info);
+    
     // Display Gemini identification
     displayIdentification(data.card_identification);
     
     // Display TCG matches
     displayMatches(data.tcg_matches, data.best_match);
+}
+
+function displayProcessedImages(processingInfo) {
+    // Find or create the processed images section
+    let processedSection = document.getElementById('processedImagesCard');
+    
+    if (!processedSection) {
+        processedSection = document.createElement('div');
+        processedSection.id = 'processedImagesCard';
+        processedSection.className = 'result-card';
+        processedSection.innerHTML = '<h3>📸 Image Processing</h3><div id="processedImagesContent"></div>';
+        
+        // Insert after summary card
+        const summaryCard = document.querySelector('.summary-card');
+        summaryCard.insertAdjacentElement('afterend', processedSection);
+    }
+    
+    const content = document.getElementById('processedImagesContent');
+    content.innerHTML = '';
+    
+    if (processingInfo?.image_processing?.original_path && processingInfo?.image_processing?.processed_path) {
+        const originalPath = processingInfo.image_processing.original_path;
+        const processedPath = processingInfo.image_processing.processed_path;
+        
+        // Extract filenames for API calls
+        const originalFilename = originalPath.split('/').pop();
+        const processedFilename = processedPath.split('/').pop();
+        
+        content.innerHTML = `
+            <div class="image-comparison">
+                <div class="comparison-item">
+                    <h4>Original Image</h4>
+                    <img src="/api/v1/processed-images/${originalFilename}" 
+                         alt="Original" 
+                         class="comparison-image" 
+                         loading="lazy">
+                    <p class="image-info">Format: ${processingInfo.image_processing.original_format || 'Unknown'}</p>
+                    <p class="image-info">Size: ${formatBytes(processingInfo.image_processing.original_size || 0)}</p>
+                </div>
+                <div class="comparison-arrow">➡️</div>
+                <div class="comparison-item">
+                    <h4>Processed Image</h4>
+                    <img src="/api/v1/processed-images/${processedFilename}" 
+                         alt="Processed" 
+                         class="comparison-image" 
+                         loading="lazy">
+                    <p class="image-info">Format: JPEG (optimized)</p>
+                    <p class="image-info">Size: ${formatBytes(processingInfo.image_processing.processed_size || 0)}</p>
+                    ${processingInfo.image_processing.resized ? '<p class="image-info">✅ Resized for optimal processing</p>' : ''}
+                    ${processingInfo.image_processing.orientation_corrected ? '<p class="image-info">✅ Orientation corrected</p>' : ''}
+                </div>
+            </div>
+        `;
+    } else {
+        content.innerHTML = '<p style="color: var(--text-secondary);">Image processing information not available.</p>';
+    }
 }
 
 function displaySummary(data) {
@@ -378,6 +437,14 @@ function fileToBase64(file) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 function updateLoadingStatus(status) {

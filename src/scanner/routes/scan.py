@@ -3,11 +3,16 @@
 import base64
 import json
 import logging
+import os
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from ..models.schemas import (
     CostInfo,
@@ -26,6 +31,46 @@ from ..utils.cost_tracker import CostTracker
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["scanner"])
+
+
+def save_processed_image(image_data: bytes, original_filename: str, stage: str = "processed") -> Optional[str]:
+    """
+    Save processed image to disk for testing and debugging purposes.
+    
+    Args:
+        image_data: The image data as bytes
+        original_filename: Original filename for reference
+        stage: Stage of processing ("original" or "processed")
+        
+    Returns:
+        Relative path to saved image or None if failed
+    """
+    try:
+        # Create processed_images directory if it doesn't exist
+        processed_dir = Path("processed_images")
+        processed_dir.mkdir(exist_ok=True)
+        
+        # Generate timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Remove last 3 microsecond digits
+        
+        # Create filename
+        name_without_ext = Path(original_filename).stem if original_filename else "image"
+        extension = ".jpg"  # Always save as JPEG since we process to JPEG
+        filename = f"{name_without_ext}_{stage}_{timestamp}{extension}"
+        
+        # Full path
+        file_path = processed_dir / filename
+        
+        # Save the image
+        with open(file_path, "wb") as f:
+            f.write(image_data)
+        
+        logger.info(f"💾 Saved {stage} image: {file_path}")
+        return str(file_path)
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to save {stage} image: {str(e)}")
+        return None
 
 
 def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
@@ -178,6 +223,9 @@ async def scan_pokemon_card(request: ScanRequest):
         
         logger.info(f"🔍 Starting card scan for {request.filename or 'uploaded image'}")
         
+        # Save original image for testing
+        original_path = save_processed_image(image_data, request.filename or "image", "original")
+        
         # Step 1: Process image
         image_start = time.time()
         processed_data, image_info = image_processor.process_image(
@@ -185,9 +233,15 @@ async def scan_pokemon_card(request: ScanRequest):
             filename=request.filename or "",
         )
         image_time = (time.time() - image_start) * 1000
+        
+        # Save processed image for testing
+        processed_path = save_processed_image(processed_data, request.filename or "image", "processed")
+        
         processing_info["image_processing"] = {
             **image_info,
             "processing_time_ms": int(image_time),
+            "original_path": original_path,
+            "processed_path": processed_path,
         }
         
         # Step 2: Identify card with Gemini
@@ -337,3 +391,89 @@ async def scan_pokemon_card(request: ScanRequest):
             error=str(e),
             processing_info=ProcessingInfo(**processing_info),
         )
+
+
+@router.get("/processed-images/list")
+async def list_processed_images():
+    """
+    List all processed images for testing purposes.
+    
+    Returns a list of available processed images with metadata.
+    """
+    try:
+        processed_dir = Path("processed_images")
+        if not processed_dir.exists():
+            return {"images": []}
+        
+        images = []
+        for image_file in processed_dir.glob("*.jpg"):
+            try:
+                stat = image_file.stat()
+                # Parse filename to extract info
+                parts = image_file.stem.split('_')
+                if len(parts) >= 3:
+                    name = '_'.join(parts[:-2])  # Everything except stage and timestamp
+                    stage = parts[-2]
+                    timestamp = parts[-1]
+                else:
+                    name = image_file.stem
+                    stage = "unknown"
+                    timestamp = ""
+                
+                images.append({
+                    "filename": image_file.name,
+                    "path": str(image_file),
+                    "url": f"/api/v1/processed-images/{image_file.name}",
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                    "stage": stage,
+                    "original_name": name,
+                    "timestamp": timestamp,
+                })
+            except Exception as e:
+                logger.warning(f"Error processing image file {image_file}: {e}")
+                continue
+        
+        # Sort by modification time, newest first
+        images.sort(key=lambda x: x["modified"], reverse=True)
+        
+        return {"images": images}
+        
+    except Exception as e:
+        logger.error(f"Error listing processed images: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/processed-images/{filename}")
+async def get_processed_image(filename: str):
+    """
+    Serve a processed image file.
+    
+    Args:
+        filename: Name of the image file to serve
+        
+    Returns:
+        The image file
+    """
+    try:
+        processed_dir = Path("processed_images")
+        file_path = processed_dir / filename
+        
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Verify it's actually an image file
+        if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+            raise HTTPException(status_code=400, detail="Invalid image file type")
+        
+        return FileResponse(
+            path=str(file_path),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"}  # Cache for 1 hour
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving image {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
