@@ -19,9 +19,15 @@
                 <h2>Upload Card Image</h2>
                 <p>Drag & drop or click to browse</p>
                 <input type="file" id="imageInput" accept="image/*,.heic,.heif" hidden>
-                <button class="btn-primary" onclick="document.getElementById('imageInput').click()">
-                    Choose Image
-                </button>
+                <div class="upload-buttons">
+                    <button class="btn-primary" onclick="document.getElementById('imageInput').click()">
+                        Choose Image
+                    </button>
+                    <button class="btn-primary camera-btn" id="cameraBtn" onclick="openCamera()" style="display: none;">
+                        <span class="camera-icon">📸</span>
+                        Take Photo
+                    </button>
+                </div>
             </div>
             
             <div class="options-panel" id="optionsPanel" style="display: none;">
@@ -95,6 +101,27 @@
                 <button class="btn-secondary" onclick="resetUpload()">
                     Try Again
                 </button>
+            </div>
+        </div>
+        
+        <!-- Camera Modal -->
+        <div class="camera-modal" id="cameraModal" style="display: none;">
+            <div class="camera-container">
+                <div class="camera-header">
+                    <h3>Take Photo of Pokemon Card</h3>
+                    <button class="close-btn" onclick="closeCamera()">✕</button>
+                </div>
+                <video id="cameraVideo" autoplay playsinline></video>
+                <canvas id="cameraCanvas" style="display: none;"></canvas>
+                <div class="camera-controls">
+                    <button class="btn-capture" onclick="capturePhoto()">
+                        <span class="capture-icon">📷</span>
+                        Capture
+                    </button>
+                    <button class="btn-secondary" onclick="closeCamera()">
+                        Cancel
+                    </button>
+                </div>
             </div>
         </div>
     </div>

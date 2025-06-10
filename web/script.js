@@ -1,10 +1,12 @@
 // Pokemon Card Scanner - Frontend JavaScript
 
 let selectedFile = null;
+let cameraStream = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
+    checkCameraSupport();
 });
 
 function setupEventListeners() {
@@ -14,10 +16,28 @@ function setupEventListeners() {
     
     // Drag and drop
     const uploadArea = document.getElementById('uploadArea');
-    uploadArea.addEventListener('click', () => imageInput.click());
+    uploadArea.addEventListener('click', (e) => {
+        // Don't trigger file input if camera button was clicked
+        if (!e.target.closest('.camera-btn')) {
+            imageInput.click();
+        }
+    });
     uploadArea.addEventListener('dragover', handleDragOver);
     uploadArea.addEventListener('dragleave', handleDragLeave);
     uploadArea.addEventListener('drop', handleDrop);
+}
+
+// Check if device supports camera
+function checkCameraSupport() {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    
+    if (isMobile && hasGetUserMedia) {
+        const cameraBtn = document.getElementById('cameraBtn');
+        if (cameraBtn) {
+            cameraBtn.style.display = 'inline-block';
+        }
+    }
 }
 
 // File handling
@@ -470,4 +490,79 @@ function resetUpload() {
     document.getElementById('previewSection').style.display = 'none';
     document.getElementById('optionsPanel').style.display = 'none';
     hideAllSections();
+}
+
+// Camera functions
+async function openCamera() {
+    const modal = document.getElementById('cameraModal');
+    const video = document.getElementById('cameraVideo');
+    
+    try {
+        // Request camera permission
+        const constraints = {
+            video: {
+                facingMode: { ideal: 'environment' }, // Use rear camera on mobile
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
+        };
+        
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = cameraStream;
+        modal.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Camera error:', error);
+        let errorMessage = 'Unable to access camera. ';
+        
+        if (error.name === 'NotAllowedError') {
+            errorMessage += 'Please grant camera permission and try again.';
+        } else if (error.name === 'NotFoundError') {
+            errorMessage += 'No camera found on this device.';
+        } else {
+            errorMessage += 'Please ensure your browser supports camera access.';
+        }
+        
+        showError(errorMessage);
+    }
+}
+
+function closeCamera() {
+    const modal = document.getElementById('cameraModal');
+    const video = document.getElementById('cameraVideo');
+    
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+    
+    video.srcObject = null;
+    modal.style.display = 'none';
+}
+
+function capturePhoto() {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    const context = canvas.getContext('2d');
+    
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Draw video frame to canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convert canvas to blob
+    canvas.toBlob((blob) => {
+        if (blob) {
+            // Create a file from the blob
+            const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+            
+            // Process the captured image
+            processFile(file);
+            
+            // Close camera
+            closeCamera();
+        }
+    }, 'image/jpeg', 0.9);
 }

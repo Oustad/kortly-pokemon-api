@@ -498,6 +498,120 @@ header h1 {
     text-align: center;
 }
 
+/* Camera Elements */
+.upload-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.camera-btn {
+    display: none;
+}
+
+.camera-icon {
+    margin-right: 5px;
+}
+
+.camera-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.camera-container {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.camera-header {
+    background: var(--bg-secondary);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.camera-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.close-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+#cameraVideo {
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    background: #000;
+}
+
+.camera-controls {
+    padding: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    background: var(--bg-secondary);
+}
+
+.btn-capture {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
+
+.btn-capture:hover {
+    background: var(--primary-hover);
+    transform: scale(1.05);
+}
+
+.capture-icon {
+    font-size: 1.2rem;
+}
+
 /* Footer */
 footer {
     background-color: var(--bg-primary);
@@ -560,6 +674,22 @@ footer a:hover {
     .comparison-arrow {
         transform: rotate(90deg);
         font-size: 1.5rem;
+    }
+    
+    .camera-container {
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+    }
+    
+    .camera-modal {
+        padding: 0;
+    }
+    
+    #cameraVideo {
+        max-width: 100%;
     }
 }
 
