@@ -103,7 +103,8 @@ class ProcessingPipeline:
             gemini_start = time.time()
             gemini_result = await self.gemini_service.identify_pokemon_card(
                 processed_image_bytes,
-                optimize_for_speed=(tier == 'fast')
+                optimize_for_speed=(tier == 'fast'),
+                processing_tier=tier
             )
             gemini_time = (time.time() - gemini_start) * 1000
             

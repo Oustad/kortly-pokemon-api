@@ -41,6 +41,7 @@ class GeminiService:
         image_bytes: bytes,
         optimize_for_speed: bool = True,
         retry_unlimited: bool = False,
+        processing_tier: str = "standard",
     ) -> Dict[str, Any]:
         """
         Use Gemini to identify a Pokemon card from an image.
@@ -49,6 +50,7 @@ class GeminiService:
             image_bytes: The image data as bytes
             optimize_for_speed: If True, use optimizations to reduce processing time
             retry_unlimited: If True, retry with unlimited tokens if MAX_TOKENS error
+            processing_tier: Processing tier (fast/standard/enhanced) for prompt optimization
 
         Returns:
             Dictionary containing Gemini's response and metadata
@@ -68,37 +70,11 @@ class GeminiService:
                     pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
                     logger.info(f"Resized image to {new_size} for faster processing")
 
-            # Optimized prompt with structured TCG search format
-            prompt = """Identify this Pokemon card and provide TCG search parameters.
+            # Get tier-specific optimized prompt
+            prompt = self._get_optimized_prompt(processing_tier)
 
-Format your response exactly like this:
-TCG_SEARCH_START
-{
-  "name": "exact pokemon name",
-  "set_name": "set name if visible", 
-  "number": "card number if visible",
-  "hp": "HP value if visible",
-  "types": ["Pokemon type like Fire, Water etc"]
-}
-TCG_SEARCH_END
-
-Then provide brief analysis:
-1. Card identification
-2. Key features
-3. Estimated value
-4. Condition"""
-
-            # Configure generation settings
-            if retry_unlimited:
-                # No token limit on retry
-                generation_config = genai.types.GenerationConfig(
-                    temperature=config.gemini_temperature,
-                )
-            else:
-                generation_config = genai.types.GenerationConfig(
-                    max_output_tokens=config.gemini_max_tokens,
-                    temperature=config.gemini_temperature,
-                )
+            # Configure tier-specific generation settings
+            generation_config = self._get_generation_config(processing_tier, retry_unlimited)
 
             # Configure permissive safety settings for trading card analysis
             safety_settings = [
@@ -219,6 +195,93 @@ Then provide brief analysis:
                 "error": f"Unexpected error: {str(e)}",
             }
 
+    def _get_optimized_prompt(self, processing_tier: str) -> str:
+        """Get tier-specific optimized prompt for faster processing."""
+        
+        if processing_tier == "fast":
+            # Ultra-minimal prompt for speed
+            return """Pokemon card identification. Output format:
+TCG_SEARCH_START
+{"name": "pokemon name", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
+TCG_SEARCH_END
+Brief: Name, set, condition."""
+            
+        elif processing_tier == "enhanced":
+            # Comprehensive prompt for challenging images
+            return """Analyze this Pokemon card image carefully. If the image quality is poor, do your best to identify visible elements.
+
+Required format:
+TCG_SEARCH_START
+{
+  "name": "exact pokemon name from card",
+  "set_name": "full set name if visible",
+  "number": "card number if visible", 
+  "hp": "HP value if visible",
+  "types": ["pokemon type(s) like Fire, Water, Grass etc"],
+  "supertype": "Pokemon"
+}
+TCG_SEARCH_END
+
+Detailed analysis:
+1. Card identification and confidence level
+2. Visible text and symbols
+3. Set identification clues  
+4. Condition assessment
+5. Special features or variants
+6. Estimated market value range"""
+            
+        else:  # standard tier
+            # Balanced prompt for good performance
+            return """Identify this Pokemon card and provide search parameters.
+
+Format exactly:
+TCG_SEARCH_START
+{
+  "name": "exact pokemon name",
+  "set_name": "set name if visible",
+  "number": "card number if visible", 
+  "hp": "HP value if visible",
+  "types": ["pokemon type(s)"]
+}
+TCG_SEARCH_END
+
+Analysis:
+1. Card identification
+2. Key features
+3. Condition and value"""
+
+    def _get_generation_config(self, processing_tier: str, retry_unlimited: bool) -> genai.types.GenerationConfig:
+        """Get tier-specific generation configuration for optimal performance."""
+        
+        if retry_unlimited:
+            # No token limit on retry
+            return genai.types.GenerationConfig(
+                temperature=config.gemini_temperature,
+            )
+        
+        # Tier-specific token limits and settings
+        if processing_tier == "fast":
+            # Minimal tokens for speed
+            return genai.types.GenerationConfig(
+                max_output_tokens=min(150, config.gemini_max_tokens),  # Very short response
+                temperature=0.1,  # Low temperature for consistent, faster responses
+                top_p=0.8,        # Focused sampling
+            )
+        elif processing_tier == "enhanced":
+            # Maximum tokens for comprehensive analysis
+            return genai.types.GenerationConfig(
+                max_output_tokens=min(800, config.gemini_max_tokens * 2),  # Longer detailed response
+                temperature=config.gemini_temperature,
+                top_p=0.95,       # More creative sampling for challenging images
+            )
+        else:  # standard tier
+            # Balanced configuration
+            return genai.types.GenerationConfig(
+                max_output_tokens=config.gemini_max_tokens,
+                temperature=config.gemini_temperature,
+                top_p=0.9,
+            )
+
     def count_tokens(self, text: str) -> int:
         """Count tokens in a text string."""
         try:
@@ -226,3 +289,25 @@ Then provide brief analysis:
         except Exception as e:
             logger.warning(f"Failed to count tokens: {e}")
             return 0
+    
+    def get_prompt_optimization_stats(self) -> Dict[str, Dict[str, Any]]:
+        """Get statistics about prompt optimization across tiers."""
+        stats = {}
+        
+        for tier in ["fast", "standard", "enhanced"]:
+            prompt = self._get_optimized_prompt(tier)
+            config_obj = self._get_generation_config(tier, retry_unlimited=False)
+            
+            stats[tier] = {
+                "prompt_length": len(prompt),
+                "estimated_prompt_tokens": len(prompt.split()) * 1.3,  # Rough estimate
+                "max_output_tokens": getattr(config_obj, 'max_output_tokens', 'unlimited'),
+                "temperature": getattr(config_obj, 'temperature', 'default'),
+                "optimization_focus": {
+                    "fast": "Speed (minimal tokens, low temperature)",
+                    "standard": "Balance (standard tokens, normal temperature)", 
+                    "enhanced": "Quality (max tokens, higher creativity)"
+                }[tier]
+            }
+        
+        return stats
