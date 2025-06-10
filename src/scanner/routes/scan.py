@@ -326,7 +326,7 @@ async def scan_pokemon_card(request: ScanRequest):
         original_path = save_processed_image(image_data, request.filename or "image", "original")
         
         # Initialize processing pipeline
-        gemini_service = GeminiService()
+        gemini_service = GeminiService(api_key=config.google_api_key)
         processing_pipeline = ProcessingPipeline(gemini_service)
         
         # User preferences from request options
