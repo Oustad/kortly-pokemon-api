@@ -260,15 +260,30 @@ class ProcessingPipeline:
         
         total_time = (time.time() - start_time) * 1000
         
+        # Create default quality feedback if none available
+        quality_feedback = {
+            'overall': 'unknown',
+            'issues': ['Processing failed'],
+            'suggestions': ['Check API configuration and try again']
+        }
+        
+        if quality_result and quality_result.get('details', {}).get('feedback'):
+            quality_feedback = quality_result['details']['feedback']
+        
         return {
             'success': False,
             'error': error_message,
             'processing': {
-                'quality_score': quality_result['quality_score'] if quality_result else 0,
-                'quality_feedback': quality_result['details'].get('feedback', {}) if quality_result else {},
+                'quality_score': quality_result['quality_score'] if quality_result else 0.0,
+                'quality_feedback': quality_feedback,
                 'processing_tier': 'failed',
+                'target_time_ms': 2000,  # Default target
                 'actual_time_ms': total_time,
-                'processing_log': processing_log
+                'model_used': 'none',
+                'image_enhanced': False,
+                'performance_rating': 'failed',
+                'timing_breakdown': {'error_ms': total_time},
+                'processing_log': processing_log + [f"Error: {error_message}"]
             }
         }
     
