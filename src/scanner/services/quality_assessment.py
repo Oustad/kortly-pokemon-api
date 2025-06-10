@@ -6,6 +6,10 @@ import cv2
 import numpy as np
 from PIL import Image
 import io
+from pillow_heif import register_heif_opener
+
+# Register HEIF/HEIC support for PIL
+register_heif_opener()
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +28,38 @@ class QualityAssessment:
         Returns quality score (0-100) and detailed metrics.
         """
         try:
-            # Convert bytes to cv2 image
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if img is None:
-                return self._create_quality_result(0, "Cannot decode image")
-            
-            # Get PIL image for additional checks
+            # First try to load with PIL (handles more formats including HEIC)
             pil_img = Image.open(io.BytesIO(image_bytes))
             
+            # Convert PIL image to OpenCV format
+            # Convert to RGB if not already (handles RGBA, etc.)
+            if pil_img.mode != 'RGB':
+                pil_img = pil_img.convert('RGB')
+            
+            # Convert PIL to OpenCV
+            img_array = np.array(pil_img)
+            img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            
+            if img is None or img.size == 0:
+                return self._create_quality_result(0, "Cannot decode image")
+                
+        except Exception as decode_error:
+            # Fallback to direct OpenCV decoding for standard formats
+            try:
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if img is None:
+                    return self._create_quality_result(0, f"Cannot decode image: {str(decode_error)}")
+                
+                # Create PIL image from OpenCV for consistency
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(img_rgb)
+                
+            except Exception as e:
+                return self._create_quality_result(0, f"Image decode failed: {str(e)}")
+        
+        try:
             # Run all quality checks
             blur_score = self._assess_blur(img)
             resolution_score = self._assess_resolution(pil_img)
