@@ -12,7 +12,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_config
-from .routes import health, scan
+from .middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
+from .routes import health, metrics, scan
 from .services.webhook_service import send_error_webhook
 
 # Load environment variables
@@ -56,6 +57,10 @@ app = FastAPI(
     redoc_url="/redoc" if config.enable_api_docs else None,
     openapi_url="/openapi.json" if config.enable_api_docs else None,
 )
+
+# Add security middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # Configure CORS
 app.add_middleware(
@@ -104,6 +109,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router)
 app.include_router(scan.router)
+app.include_router(metrics.router)
 
 # Mount static files for web interface (if enabled)
 if config.serve_static_files:

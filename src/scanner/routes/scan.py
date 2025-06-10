@@ -26,6 +26,7 @@ from ..models.schemas import (
 )
 from ..services.gemini_service import GeminiService
 from ..services.image_processor import ImageProcessor
+from ..services.metrics_service import get_metrics_service, RequestMetrics
 from ..services.tcg_client import PokemonTcgClient
 from ..services.webhook_service import send_error_webhook
 from ..utils.cost_tracker import CostTracker
@@ -378,6 +379,19 @@ async def scan_pokemon_card(request: ScanRequest):
             f"{f', cost: ${gemini_cost:.6f}' if cost_info else ''}"
         )
         
+        # Record metrics
+        metrics_service = get_metrics_service()
+        metrics_service.record_request(RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/v1/scan",
+            method="POST",
+            status_code=200,
+            processing_time_ms=total_time,
+            image_size_bytes=len(image_data),
+            gemini_cost=gemini_cost,
+            tcg_matches=len(tcg_matches) if tcg_matches else 0,
+        ))
+        
         return response
         
     except HTTPException as e:
@@ -420,6 +434,18 @@ async def scan_pokemon_card(request: ScanRequest):
             context=error_context,
             traceback=str(e),
         )
+        
+        # Record error metrics
+        metrics_service = get_metrics_service()
+        metrics_service.record_request(RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/v1/scan",
+            method="POST",
+            status_code=500,
+            processing_time_ms=total_time,
+            image_size_bytes=len(image_data) if 'image_data' in locals() else None,
+            error_type=type(e).__name__,
+        ))
         
         return ScanResponse(
             success=False,
