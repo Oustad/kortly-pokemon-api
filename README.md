@@ -4,12 +4,14 @@ A production-ready Pokemon card scanner powered by Google Gemini AI and the Poke
 
 ## ✨ Features
 
-- **🤖 AI-Powered Identification**: Uses Google Gemini 2.5 Flash for accurate card recognition
-- **🎯 TCG Database Integration**: Matches cards against the comprehensive Pokemon TCG API
-- **📱 Mobile-First Design**: Optimized for iPhone/Android with HEIC support
-- **⚡ Lightning Fast**: ~1-2 second processing time
-- **💰 Cost Effective**: ~$0.003-0.005 per scan
-- **🔧 Production Ready**: Docker support, health checks, error handling
+- **🤖 AI-Powered Identification**: Google Gemini 2.5 Flash for accurate card recognition
+- **🎯 TCG Database Integration**: Comprehensive Pokemon card database matching
+- **📱 Mobile Camera Support**: Direct photo capture on mobile devices with HEIC support
+- **⚡ Lightning Fast**: Sub-2-second processing with optimized image handling
+- **💰 Cost Effective**: ~$0.003-0.005 per scan with real-time cost tracking
+- **🔧 Production Ready**: Full observability, monitoring, and deployment support
+- **🛡️ Enterprise Security**: Rate limiting, security headers, and error notifications
+- **📊 Comprehensive Metrics**: Performance monitoring with Prometheus support
 
 ## 🚀 Quick Start
 
@@ -21,46 +23,41 @@ A production-ready Pokemon card scanner powered by Google Gemini AI and the Poke
 
 ### Installation
 
-1. **Clone the repository**
+1. **Clone and setup**
    ```bash
    git clone <repository-url>
    cd pokemon-card-scanner
-   ```
-
-2. **Install dependencies**
-   ```bash
    uv sync
    ```
 
-3. **Configure environment**
+2. **Configure environment**
    ```bash
    cp .env.example .env
    # Edit .env and add your GOOGLE_API_KEY
    ```
 
-4. **Run the application**
+3. **Run the application**
    ```bash
    uv run python -m src.scanner.main
    ```
 
-5. **Open your browser**
-   ```
-   http://localhost:8000
-   ```
+4. **Access the scanner**
+   - Web interface: http://localhost:8000
+   - API docs: http://localhost:8000/docs
+   - Health check: http://localhost:8000/api/v1/health
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Essential Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `GOOGLE_API_KEY` | Google API key for Gemini | - | Yes |
-| `POKEMON_TCG_API_KEY` | Pokemon TCG API key (optional) | - | No |
-| `HOST` | Server host | `0.0.0.0` | No |
-| `PORT` | Server port | `8000` | No |
-| `OPTIMIZE_FOR_SPEED` | Enable speed optimizations | `true` | No |
-| `MAX_IMAGE_DIMENSION` | Max image size | `1024` | No |
-| `ENABLE_COST_TRACKING` | Track API costs | `true` | No |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GOOGLE_API_KEY` | Google API key for Gemini | Yes |
+| `POKEMON_TCG_API_KEY` | Pokemon TCG API key for higher rate limits | No |
+| `ENVIRONMENT` | Environment mode (development/production) | No |
+| `DEBUG` | Enable debug mode | No |
+
+For complete configuration options, see [.env.example](.env.example).
 
 ### Getting API Keys
 
@@ -74,116 +71,88 @@ A production-ready Pokemon card scanner powered by Google Gemini AI and the Poke
 #### Pokemon TCG API Key (Optional)
 1. Visit [Pokemon TCG Developer Portal](https://dev.pokemontcg.io/)
 2. Sign up for a free account
-3. Get your API key for higher rate limits
+3. Get your API key for higher rate limits (1000+ requests/hour vs 100/hour)
 
 ## 📡 API Usage
 
-### Scan Endpoint
+### Main Endpoints
 
-**POST** `/api/v1/scan`
+- **POST** `/api/v1/scan` - Scan a Pokemon card image
+- **GET** `/api/v1/health` - Service health status
+- **GET** `/api/v1/metrics` - Performance metrics (if enabled)
+- **GET** `/docs` - Interactive API documentation
 
-```json
-{
-  "image": "base64_encoded_image_data",
-  "filename": "card.jpg",
-  "options": {
-    "optimize_for_speed": true,
-    "include_cost_tracking": true,
-    "retry_on_truncation": true
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "card_identification": {
-    "raw_response": "Gemini's full analysis...",
-    "structured_data": {
-      "name": "Pikachu",
-      "set_name": "Base Set",
-      "number": "25",
-      "hp": "60",
-      "types": ["Electric"]
-    },
-    "confidence": 0.95,
-    "tokens_used": {
-      "prompt": 150,
-      "response": 300
-    }
-  },
-  "tcg_matches": [...],
-  "best_match": {...},
-  "processing_info": {
-    "total_time_ms": 1500
-  },
-  "cost_info": {
-    "total_cost": 0.003
-  }
-}
-```
-
-### Health Check
-
-**GET** `/api/v1/health`
-
-Returns service status and availability of all components.
-
-## 🐳 Docker Deployment
-
-### Build and Run
+### Example Scan Request
 
 ```bash
-# Build image
-docker build -t pokemon-card-scanner .
+curl -X POST "http://localhost:8000/api/v1/scan" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image": "base64_encoded_image_data",
+    "filename": "card.jpg",
+    "options": {
+      "optimize_for_speed": true,
+      "include_cost_tracking": true
+    }
+  }'
+```
 
-# Run container
-docker run -p 8000:8000 \
-  -e GOOGLE_API_KEY=your_key_here \
-  pokemon-card-scanner
+For detailed API documentation, visit `/docs` when the application is running.
+
+## 🚀 Deployment
+
+### Quick Docker Setup
+
+```bash
+# Build and run with Docker
+docker build -t pokemon-card-scanner .
+docker run -p 8000:8000 -e GOOGLE_API_KEY=your_key_here pokemon-card-scanner
 ```
 
 ### Docker Compose
 
-```yaml
-version: '3.8'
-services:
-  pokemon-scanner:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - GOOGLE_API_KEY=your_key_here
-      - POKEMON_TCG_API_KEY=optional_key
-    volumes:
-      - ./logs:/app/logs
+```bash
+# Copy environment file
+cp .env.example .env
+# Edit .env with your API key
+
+# Start with Docker Compose
+docker-compose up -d
 ```
+
+### Production Deployment
+
+For comprehensive deployment instructions including:
+- Kubernetes deployment
+- Google Cloud Platform (Cloud Run, GKE)
+- AWS deployment (ECS, EKS)
+- Production configuration
+- Monitoring and observability
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for detailed guides.
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
 │   Web Interface │───▶│  FastAPI     │───▶│  Gemini 2.5     │
-│   (HTML/CSS/JS) │    │  Application │    │  Flash API      │
-└─────────────────┘    └──────┬───────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐
-                       │  Pokemon TCG    │
-                       │  API Client     │
-                       └─────────────────┘
+│ Mobile Camera + │    │  Application │    │  Flash API      │
+│  File Upload    │    │              │    └─────────────────┘
+└─────────────────┘    │              │    ┌─────────────────┐
+                       │              │───▶│  Pokemon TCG    │
+                       │              │    │  Database       │
+                       └──────────────┘    └─────────────────┘
 ```
 
 ### Key Components
 
-- **Image Processor**: Handles HEIC/JPEG/PNG formats with optimization
+- **Image Processor**: Multi-format support (HEIC/JPEG/PNG) with optimization
 - **Gemini Service**: AI-powered card identification with structured output
-- **TCG Client**: Pokemon card database integration with caching
-- **Cost Tracker**: Real-time API usage monitoring
-- **Web Interface**: Clean, mobile-first user experience
+- **TCG Client**: Pokemon card database integration with fuzzy matching
+- **Metrics Service**: Real-time performance monitoring and cost tracking
+- **Security Middleware**: Rate limiting, security headers, error notifications
 
-## 📊 Performance
+## 📊 Performance & Features
 
 | Metric | Value |
 |--------|-------|
@@ -191,11 +160,12 @@ services:
 | Cost per Scan | $0.003-0.005 |
 | Accuracy | >95% for clear images |
 | Supported Formats | JPEG, PNG, HEIC, WebP |
-| Rate Limit | 100 requests/hour (TCG API) |
+| Mobile Camera | ✅ Direct capture |
+| Rate Limiting | ✅ Configurable |
+| Monitoring | ✅ Prometheus metrics |
+| Error Notifications | ✅ Slack/Discord webhooks |
 
 ## 🧪 Testing
-
-### Run Tests
 
 ```bash
 # Run all tests
@@ -204,16 +174,10 @@ uv run pytest
 # Run with coverage
 uv run pytest --cov=src
 
-# Run specific test
-uv run pytest tests/test_scan.py
+# Manual testing
+uv run python -m src.scanner.main
+# Open http://localhost:8000 and upload a card image
 ```
-
-### Manual Testing
-
-1. Start the server: `uv run python -m src.scanner.main`
-2. Open http://localhost:8000
-3. Upload a Pokemon card image
-4. Verify identification and TCG matches
 
 ## 🛠️ Development
 
@@ -221,35 +185,25 @@ uv run pytest tests/test_scan.py
 
 ```
 pokemon-card-scanner/
-├── src/scanner/
-│   ├── main.py              # FastAPI application
-│   ├── routes/
-│   │   ├── scan.py          # Main scanning endpoint
-│   │   └── health.py        # Health checks
-│   ├── services/
-│   │   ├── gemini_service.py    # Gemini AI integration
-│   │   ├── tcg_client.py        # Pokemon TCG API client
-│   │   └── image_processor.py   # Image processing
-│   ├── models/
-│   │   └── schemas.py       # Pydantic models
-│   └── utils/
-│       └── cost_tracker.py  # Cost monitoring
-├── web/                     # Frontend files
-├── tests/                   # Test suite
-├── Dockerfile              # Container config
-└── pyproject.toml          # Python dependencies
+├── src/scanner/             # Main application
+│   ├── main.py             # FastAPI app with middleware
+│   ├── config.py           # Configuration management
+│   ├── routes/             # API endpoints
+│   ├── services/           # Core business logic
+│   ├── middleware/         # Security and rate limiting
+│   └── models/             # Data schemas
+├── web/                    # Frontend (HTML/CSS/JS)
+├── k8s/                    # Kubernetes manifests
+├── tests/                  # Test suite
+└── DEPLOYMENT.md           # Comprehensive deployment guide
 ```
 
 ### Code Quality
 
 ```bash
-# Format code
+# Format and lint
 uv run black src tests
-
-# Lint code
 uv run ruff check src tests
-
-# Type checking
 uv run mypy src
 ```
 
@@ -257,53 +211,46 @@ uv run mypy src
 
 ### Common Issues
 
-**Gemini API Error**: Verify GOOGLE_API_KEY is set and has Generative AI API enabled
+| Issue | Solution |
+|-------|----------|
+| **Gemini API Error** | Verify `GOOGLE_API_KEY` is set and Generative AI API is enabled |
+| **Configuration Error** | Check `.env` file exists and contains required variables |
+| **HEIC Not Supported** | Ensure `pillow-heif` is installed (included in dependencies) |
+| **Rate Limit Exceeded** | Add `POKEMON_TCG_API_KEY` for higher rate limits |
+| **Memory Issues** | Images are auto-resized to 1024px max dimension |
 
-**HEIC Images Not Supported**: Install pillow-heif: `uv add pillow-heif`
+### Monitoring
 
-**Rate Limit Exceeded**: Pokemon TCG API has 100 requests/hour limit without API key
+- **Health Check**: `GET /api/v1/health`
+- **Metrics**: `GET /api/v1/metrics` (if enabled)
+- **Logs**: Structured JSON logging with request tracing
+- **Costs**: Real-time API cost tracking in responses
 
-**Memory Usage**: Large images are automatically resized to 1024px max dimension
+## 📈 Cost Estimate
 
-### Logging
+| Usage | Monthly Cost |
+|-------|-------------|
+| 1,000 scans | ~$3 |
+| 10,000 scans | ~$30 |
+| 100,000 scans | ~$300 |
 
-Application logs include:
-- Request processing times
-- API costs and token usage
-- Error details with stack traces
-- Cache hit/miss statistics
-
-## 📈 Cost Analysis
-
-Based on Google Gemini pricing:
-
-| Component | Cost | Notes |
-|-----------|------|-------|
-| Image Processing | $0.0025 | Per image analyzed |
-| Input Tokens | ~$0.000015 | ~100 tokens average |
-| Output Tokens | ~$0.00018 | ~300 tokens average |
-| **Total per scan** | **~$0.003** | Actual usage may vary |
-
-Monthly cost estimates:
-- 1,000 scans: ~$3
-- 10,000 scans: ~$30
-- 100,000 scans: ~$300
+*Based on current Google Gemini pricing (~$0.003 per scan)*
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Add tests for new functionality
-4. Ensure all tests pass
+4. Ensure all tests pass (`uv run pytest`)
 5. Submit a pull request
 
 ## 📄 License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details.
 
-## 🔗 Related Links
+## 🔗 Links
 
-- [Google Gemini API](https://ai.google.dev/)
-- [Pokemon TCG API](https://pokemontcg.io/)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Project PRD v5.0](specs/prd5.txt)
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Comprehensive deployment guide
+- **[.env.example](.env.example)** - Complete configuration reference
+- [Google Gemini API](https://ai.google.dev/) - AI service documentation
+- [Pokemon TCG API](https://pokemontcg.io/) - Card database documentation
