@@ -3,6 +3,10 @@ import os
 from typing import Optional
 from functools import lru_cache
 
+# Load environment variables first
+from dotenv import load_dotenv
+load_dotenv()
+
 
 class Config:
     """Application configuration with environment variable support."""
