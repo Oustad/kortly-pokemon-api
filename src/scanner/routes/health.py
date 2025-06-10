@@ -3,13 +3,16 @@
 import logging
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from ..config import get_config
 from ..models.schemas import HealthResponse
 from ..services.gemini_service import GeminiService
 from ..services.tcg_client import PokemonTcgClient
+from ..services.webhook_service import send_error_webhook
 
 logger = logging.getLogger(__name__)
+config = get_config()
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
@@ -75,3 +78,41 @@ async def readiness_check():
     Returns 200 if the service is ready to accept requests.
     """
     return {"ready": True}
+
+
+@router.post("/test-webhook")
+async def test_webhook():
+    """
+    Test webhook notification functionality.
+    
+    Only available in development/debug mode.
+    """
+    if not config.debug and config.environment == "production":
+        raise HTTPException(
+            status_code=404,
+            detail="Endpoint not available in production mode"
+        )
+    
+    if not config.error_webhook_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Webhook notifications are disabled"
+        )
+    
+    # Send test notification
+    success = await send_error_webhook(
+        error_message="Test webhook notification from Pokemon Card Scanner",
+        level="INFO",
+        endpoint="/api/v1/test-webhook",
+        context={
+            "test": True,
+            "environment": config.environment,
+            "webhook_url": config.error_webhook_url[:50] + "..." if len(config.error_webhook_url) > 50 else config.error_webhook_url,
+        },
+    )
+    
+    return {
+        "webhook_test": "sent" if success else "failed",
+        "webhook_enabled": config.error_webhook_enabled,
+        "webhook_url_configured": bool(config.error_webhook_url),
+    }

@@ -27,6 +27,7 @@ from ..models.schemas import (
 from ..services.gemini_service import GeminiService
 from ..services.image_processor import ImageProcessor
 from ..services.tcg_client import PokemonTcgClient
+from ..services.webhook_service import send_error_webhook
 from ..utils.cost_tracker import CostTracker
 
 logger = logging.getLogger(__name__)
@@ -379,7 +380,23 @@ async def scan_pokemon_card(request: ScanRequest):
         
         return response
         
-    except HTTPException:
+    except HTTPException as e:
+        # Log and send webhook for HTTP errors
+        error_context = {
+            "status_code": e.status_code,
+            "filename": request.filename,
+            "processing_time_ms": int((time.time() - start_time) * 1000),
+        }
+        
+        # Send webhook notification for critical errors
+        if e.status_code >= 500:
+            await send_error_webhook(
+                error_message=f"HTTP {e.status_code}: {e.detail}",
+                level="ERROR",
+                endpoint="/api/v1/scan",
+                context=error_context,
+            )
+        
         raise
     except Exception as e:
         logger.error(f"❌ Card scan failed: {str(e)}")
@@ -387,6 +404,22 @@ async def scan_pokemon_card(request: ScanRequest):
         # Calculate total time even on error
         total_time = (time.time() - start_time) * 1000
         processing_info["total_time_ms"] = int(total_time)
+        
+        # Prepare error context
+        error_context = {
+            "filename": request.filename,
+            "processing_time_ms": int(total_time),
+            "error_type": type(e).__name__,
+        }
+        
+        # Send webhook notification
+        await send_error_webhook(
+            error_message=f"Card scan failed: {str(e)}",
+            level="ERROR",
+            endpoint="/api/v1/scan",
+            context=error_context,
+            traceback=str(e),
+        )
         
         return ScanResponse(
             success=False,

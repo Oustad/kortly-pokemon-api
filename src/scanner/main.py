@@ -6,12 +6,14 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_config
 from .routes import health, scan
+from .services.webhook_service import send_error_webhook
 
 # Load environment variables
 load_dotenv()
@@ -63,6 +65,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions."""
+    import traceback
+    
+    error_message = f"Unhandled exception: {str(exc)}"
+    error_traceback = traceback.format_exc()
+    
+    logger.error(f"❌ {error_message}")
+    logger.debug(error_traceback)
+    
+    # Send webhook notification
+    await send_error_webhook(
+        error_message=error_message,
+        level="CRITICAL",
+        endpoint=str(request.url.path),
+        user_agent=request.headers.get("user-agent"),
+        traceback=error_traceback,
+        context={
+            "method": request.method,
+            "url": str(request.url),
+            "client_ip": request.client.host if request.client else None,
+        },
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal server error",
+            "detail": str(exc) if config.debug else "An unexpected error occurred",
+        },
+    )
 
 # Include routers
 app.include_router(health.router)
