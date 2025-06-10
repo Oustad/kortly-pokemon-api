@@ -10,6 +10,10 @@ class ScanOptions(BaseModel):
     optimize_for_speed: bool = Field(default=True, description="Optimize for faster processing")
     include_cost_tracking: bool = Field(default=True, description="Track API usage costs")
     retry_on_truncation: bool = Field(default=True, description="Retry if response is truncated")
+    quality_threshold: Optional[int] = Field(None, description="Minimum quality score (0-100)")
+    max_processing_time: Optional[int] = Field(None, description="Maximum processing time in ms")
+    prefer_speed: Optional[bool] = Field(None, description="Prefer speed over quality")
+    prefer_quality: Optional[bool] = Field(None, description="Prefer quality over speed")
 
 
 class ScanRequest(BaseModel):
@@ -40,12 +44,25 @@ class PokemonCard(BaseModel):
     market_prices: Optional[Dict[str, Any]] = Field(None, description="Market price data")
 
 
+class QualityFeedback(BaseModel):
+    """Quality assessment feedback."""
+    overall: str = Field(..., description="Overall quality rating")
+    issues: List[str] = Field(default_factory=list, description="Identified quality issues")
+    suggestions: List[str] = Field(default_factory=list, description="Improvement suggestions")
+
+
 class ProcessingInfo(BaseModel):
     """Information about the processing steps."""
-    image_processing: Dict[str, Any] = Field(..., description="Image processing details")
-    gemini_processing: Dict[str, Any] = Field(..., description="Gemini processing details")
-    tcg_search: Dict[str, Any] = Field(..., description="TCG search details")
-    total_time_ms: int = Field(..., description="Total processing time in milliseconds")
+    quality_score: float = Field(..., description="Image quality score (0-100)")
+    quality_feedback: QualityFeedback = Field(..., description="Quality assessment feedback")
+    processing_tier: str = Field(..., description="Processing tier used (fast/standard/enhanced)")
+    target_time_ms: int = Field(..., description="Target processing time for tier")
+    actual_time_ms: float = Field(..., description="Actual processing time")
+    model_used: str = Field(..., description="AI model used for analysis")
+    image_enhanced: bool = Field(..., description="Whether image enhancement was applied")
+    performance_rating: str = Field(..., description="Performance rating vs target")
+    timing_breakdown: Dict[str, float] = Field(..., description="Detailed timing breakdown")
+    processing_log: List[str] = Field(default_factory=list, description="Processing step log")
 
 
 class CostInfo(BaseModel):
@@ -61,7 +78,7 @@ class ScanResponse(BaseModel):
     card_identification: Optional[GeminiAnalysis] = Field(None, description="Gemini's card analysis")
     tcg_matches: Optional[List[PokemonCard]] = Field(None, description="Matching cards from TCG API")
     best_match: Optional[PokemonCard] = Field(None, description="Best matching card")
-    processing_info: ProcessingInfo = Field(..., description="Processing details")
+    processing: ProcessingInfo = Field(..., description="Processing details and quality metrics")
     cost_info: Optional[CostInfo] = Field(None, description="Cost tracking information")
     error: Optional[str] = Field(None, description="Error message if scan failed")
 

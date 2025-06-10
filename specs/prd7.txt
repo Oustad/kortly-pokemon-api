@@ -55,22 +55,14 @@ Current processing times of 4-7 seconds per scan create a poor user experience, 
 #### Backend Optimizations
 - **Async processing**: Non-blocking image operations
 - **Connection pooling**: Reuse API connections
-- **Response caching**: Cache TCG API responses for 24 hours
 - **Batch API calls**: Combine multiple card lookups
 
 #### Model Optimizations
-- **Dynamic model selection**: Based on image quality
 - **Prompt optimization**: Shorter, focused prompts
-- **Response streaming**: Start UI updates before full completion
 - **Fallback strategies**: Quick retry with different models
 
-### 4. Caching Strategy
-- **In-memory cache**: Recent 100 cards (LRU)
-- **Redis cache**: Extended history and popular cards
-- **Edge caching**: Static assets and common responses
-- **Cache warming**: Pre-load popular cards
 
-### 5. Quality Feedback System
+### 4 . Quality Feedback System
 - **Real-time indicators**:
   - Quality score badge (Excellent/Good/Poor)
   - Specific improvement tips
@@ -92,7 +84,6 @@ Current processing times of 4-7 seconds per scan create a poor user experience, 
 
 ### Phase 2: Optimization (Week 2)
 1. Client-side image resizing
-2. Implement caching layers
 3. Add async processing
 4. Optimize API prompts
 
@@ -168,7 +159,6 @@ Current processing times of 4-7 seconds per scan create a poor user experience, 
 
 ### Results Display
 - Progressive loading of card details
-- Cached results appear instantly
 - Background enhancement for poor scans
 - Quality improvement tips
 
@@ -200,7 +190,6 @@ Current processing times of 4-7 seconds per scan create a poor user experience, 
 
 ## Dependencies
 - OpenCV or similar for image quality assessment
-- Redis for distributed caching
 - WebP encoding libraries
 - Performance monitoring tools
 - A/B testing framework

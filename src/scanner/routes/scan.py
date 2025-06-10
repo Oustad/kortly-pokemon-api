@@ -21,12 +21,14 @@ from ..models.schemas import (
     GeminiAnalysis,
     PokemonCard,
     ProcessingInfo,
+    QualityFeedback,
     ScanRequest,
     ScanResponse,
 )
 from ..services.gemini_service import GeminiService
 from ..services.image_processor import ImageProcessor
 from ..services.metrics_service import get_metrics_service, RequestMetrics
+from ..services.processing_pipeline import ProcessingPipeline
 from ..services.tcg_client import PokemonTcgClient
 from ..services.webhook_service import send_error_webhook
 from ..utils.cost_tracker import CostTracker
@@ -297,31 +299,19 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
 @router.post("/scan", response_model=ScanResponse, responses={500: {"model": ErrorResponse}})
 async def scan_pokemon_card(request: ScanRequest):
     """
-    Scan a Pokemon card image and identify it.
+    Scan a Pokemon card image and identify it using intelligent processing pipeline.
     
     This endpoint:
-    1. Processes the image for optimal analysis
-    2. Uses Gemini AI to identify the card
+    1. Assesses image quality and routes to appropriate processing tier
+    2. Uses optimized Gemini AI analysis based on quality score
     3. Searches the Pokemon TCG database for matches
-    4. Returns comprehensive card information
+    4. Returns comprehensive card information with quality metrics
     
-    The entire process typically takes 1-2 seconds and costs ~$0.003 per scan.
+    Processing time varies by quality: excellent (1s), good (1-2s), poor (2-4s).
+    Cost: ~$0.003-0.005 per scan depending on processing tier.
     """
     start_time = time.time()
-    
-    # Initialize services
-    gemini_service = GeminiService()
-    tcg_client = PokemonTcgClient()
-    image_processor = ImageProcessor()
     cost_tracker = CostTracker()
-    
-    # Initialize processing info
-    processing_info = {
-        "image_processing": {},
-        "gemini_processing": {},
-        "tcg_search": {},
-        "total_time_ms": 0,
-    }
     
     try:
         # Decode base64 image
@@ -330,79 +320,67 @@ async def scan_pokemon_card(request: ScanRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {str(e)}")
         
-        logger.info(f"🔍 Starting card scan for {request.filename or 'uploaded image'}")
+        logger.info(f"🔍 Starting intelligent card scan for {request.filename or 'uploaded image'}")
         
         # Save original image for testing
         original_path = save_processed_image(image_data, request.filename or "image", "original")
         
-        # Step 1: Process image
-        image_start = time.time()
-        processed_data, image_info = image_processor.process_image(
+        # Initialize processing pipeline
+        gemini_service = GeminiService()
+        processing_pipeline = ProcessingPipeline(gemini_service)
+        
+        # User preferences from request options
+        user_preferences = {}
+        if request.options.prefer_speed is not None:
+            user_preferences['prefer_speed'] = request.options.prefer_speed
+        if request.options.prefer_quality is not None:
+            user_preferences['prefer_quality'] = request.options.prefer_quality
+        if request.options.max_processing_time is not None:
+            user_preferences['max_processing_time'] = request.options.max_processing_time
+        
+        # Run through processing pipeline
+        pipeline_result = await processing_pipeline.process_image(
             image_data,
-            filename=request.filename or "",
-        )
-        image_time = (time.time() - image_start) * 1000
-        
-        # Save processed image for testing
-        processed_path = save_processed_image(processed_data, request.filename or "image", "processed")
-        
-        processing_info["image_processing"] = {
-            **image_info,
-            "processing_time_ms": int(image_time),
-            "original_path": original_path,
-            "processed_path": processed_path,
-        }
-        
-        # Step 2: Identify card with Gemini
-        logger.info("🤖 Identifying card with Gemini AI...")
-        gemini_start = time.time()
-        
-        gemini_result = await gemini_service.identify_pokemon_card(
-            processed_data,
-            optimize_for_speed=request.options.optimize_for_speed,
-            retry_unlimited=request.options.retry_on_truncation,
+            request.filename or "image",
+            user_preferences if user_preferences else None
         )
         
-        gemini_time = (time.time() - gemini_start) * 1000
-        processing_info["gemini_processing"] = {
-            "processing_time_ms": int(gemini_time),
-            "truncated": gemini_result.get("truncated", False),
-            "finish_reason": gemini_result.get("finish_reason"),
-        }
-        
-        if not gemini_result.get("success"):
+        if not pipeline_result['success']:
             raise HTTPException(
                 status_code=500,
-                detail=f"Gemini analysis failed: {gemini_result.get('error')}",
+                detail=f"Processing pipeline failed: {pipeline_result.get('error')}",
             )
         
-        # Track Gemini cost
-        if request.options.include_cost_tracking:
-            gemini_cost = cost_tracker.track_gemini_usage(
-                prompt_tokens=gemini_result.get("prompt_tokens", 0),
-                response_tokens=gemini_result.get("response_tokens", 0),
-                includes_image=True,
-                operation="identify_card",
-            )
-        
-        # Parse Gemini response
-        parsed_data = parse_gemini_response(gemini_result["response"])
+        # Extract Gemini result and parse for TCG search
+        gemini_data = pipeline_result['card_data']
+        parsed_data = parse_gemini_response(gemini_data["response"])
         
         # Create Gemini analysis object
         gemini_analysis = GeminiAnalysis(
-            raw_response=gemini_result["response"],
+            raw_response=gemini_data["response"],
             structured_data=parsed_data,
             confidence=0.9 if parsed_data.get("name") else 0.5,
             tokens_used={
-                "prompt": gemini_result.get("prompt_tokens", 0),
-                "response": gemini_result.get("response_tokens", 0),
+                "prompt": gemini_data.get("prompt_tokens", 0),
+                "response": gemini_data.get("response_tokens", 0),
             },
         )
+        
+        # Track Gemini cost
+        gemini_cost = 0.0
+        if request.options.include_cost_tracking:
+            gemini_cost = cost_tracker.track_gemini_usage(
+                prompt_tokens=gemini_data.get("prompt_tokens", 0),
+                response_tokens=gemini_data.get("response_tokens", 0),
+                includes_image=True,
+                operation="identify_card",
+            )
         
         # Step 3: Search TCG database
         logger.info("🎯 Searching Pokemon TCG database...")
         tcg_start = time.time()
         
+        tcg_client = PokemonTcgClient()
         tcg_matches = []
         search_attempts = []
         best_match_card = None
@@ -538,21 +516,46 @@ async def scan_pokemon_card(request: ScanRequest):
                 cost_tracker.track_tcg_usage("search")
         
         tcg_time = (time.time() - tcg_start) * 1000
-        processing_info["tcg_search"] = {
-            "processing_time_ms": int(tcg_time),
-            "query": parsed_data,
-            "matches_found": len(tcg_matches),
-            "search_attempts": search_attempts,
-        }
         
-        # Calculate total time
-        total_time = (time.time() - start_time) * 1000
-        processing_info["total_time_ms"] = int(total_time)
+        # Save processed image for testing
+        processed_path = None
+        if pipeline_result.get('processed_image_data'):
+            processed_path = save_processed_image(
+                pipeline_result['processed_image_data'], 
+                request.filename or "image", 
+                "processed"
+            )
+        
+        # Build comprehensive processing info
+        processing_metadata = pipeline_result['processing']
+        quality_feedback = QualityFeedback(
+            overall=processing_metadata['quality_feedback']['overall'],
+            issues=processing_metadata['quality_feedback']['issues'],
+            suggestions=processing_metadata['quality_feedback']['suggestions']
+        )
+        
+        processing_info = ProcessingInfo(
+            quality_score=processing_metadata['quality_score'],
+            quality_feedback=quality_feedback,
+            processing_tier=processing_metadata['processing_tier'],
+            target_time_ms=processing_metadata['target_time_ms'],
+            actual_time_ms=processing_metadata['actual_time_ms'] + tcg_time,  # Include TCG time
+            model_used=processing_metadata['model_used'],
+            image_enhanced=processing_metadata['image_enhanced'],
+            performance_rating=processing_metadata['performance_rating'],
+            timing_breakdown={
+                **processing_metadata['timing_breakdown'],
+                'tcg_search_ms': tcg_time
+            },
+            processing_log=processing_metadata['processing_log'] + [
+                f"TCG search: {tcg_time:.1f}ms",
+                f"Found {len(tcg_matches)} matches" if tcg_matches else "No TCG matches found"
+            ]
+        )
         
         # Prepare cost info
         cost_info = None
         if request.options.include_cost_tracking:
-            session_summary = cost_tracker.get_session_summary()
             cost_info = CostInfo(
                 gemini_cost=gemini_cost,
                 total_cost=gemini_cost,  # TCG API is free
@@ -569,12 +572,15 @@ async def scan_pokemon_card(request: ScanRequest):
             card_identification=gemini_analysis,
             tcg_matches=tcg_matches if tcg_matches else None,
             best_match=best_match_card,
-            processing_info=ProcessingInfo(**processing_info),
+            processing=processing_info,
             cost_info=cost_info,
         )
         
+        total_time = processing_info.actual_time_ms
         logger.info(
-            f"✅ Scan complete in {total_time:.0f}ms"
+            f"✅ Intelligent scan complete in {total_time:.0f}ms "
+            f"(tier: {processing_info.processing_tier}, "
+            f"quality: {processing_info.quality_score:.1f})"
             f"{f', cost: ${gemini_cost:.6f}' if cost_info else ''}"
         )
         
@@ -646,10 +652,30 @@ async def scan_pokemon_card(request: ScanRequest):
             error_type=type(e).__name__,
         ))
         
+        # Create minimal processing info for error response
+        quality_feedback = QualityFeedback(
+            overall="unknown",
+            issues=["Processing failed"],
+            suggestions=["Try uploading a different image"]
+        )
+        
+        processing_info_obj = ProcessingInfo(
+            quality_score=0.0,
+            quality_feedback=quality_feedback,
+            processing_tier="failed",
+            target_time_ms=2000,
+            actual_time_ms=total_time,
+            model_used="none",
+            image_enhanced=False,
+            performance_rating="failed",
+            timing_breakdown={"error_ms": total_time},
+            processing_log=[f"Error: {str(e)}"]
+        )
+        
         return ScanResponse(
             success=False,
             error=str(e),
-            processing_info=ProcessingInfo(**processing_info),
+            processing=processing_info_obj,
         )
 
 
