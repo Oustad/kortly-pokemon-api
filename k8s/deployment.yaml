@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pokemon-scanner
+  namespace: pokemon-scanner
+  labels:
+    app: pokemon-scanner
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: pokemon-scanner
+  template:
+    metadata:
+      labels:
+        app: pokemon-scanner
+        version: v1.0.0
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: pokemon-scanner
+        image: pokemon-card-scanner:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        # Load secrets
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pokemon-scanner-secrets
+              key: GOOGLE_API_KEY
+        - name: POKEMON_TCG_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pokemon-scanner-secrets
+              key: POKEMON_TCG_API_KEY
+              optional: true
+        - name: ERROR_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: pokemon-scanner-secrets
+              key: ERROR_WEBHOOK_URL
+              optional: true
+        - name: ERROR_WEBHOOK_ENABLED
+          valueFrom:
+            secretKeyRef:
+              name: pokemon-scanner-secrets
+              key: ERROR_WEBHOOK_ENABLED
+              optional: true
+        envFrom:
+        # Load configuration
+        - configMapRef:
+            name: pokemon-scanner-config
+        # Load remaining secrets
+        - secretRef:
+            name: pokemon-scanner-secrets
+            optional: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+            ephemeral-storage: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: processed-images
+          mountPath: /app/processed_images
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: processed-images
+        emptyDir:
+          sizeLimit: 1Gi
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

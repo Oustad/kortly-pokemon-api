@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  pokemon-scanner:
+    build:
+      context: .
+      target: production
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - POKEMON_TCG_API_KEY=${POKEMON_TCG_API_KEY:-}
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - SERVE_STATIC_FILES=false
+      - ENABLE_API_DOCS=false
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - RATE_LIMIT_PER_MINUTE=60
+      - CACHE_ENABLED=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./web:/usr/share/nginx/html:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      pokemon-scanner:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  nginx_cache:

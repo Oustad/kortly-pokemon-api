@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pokemon-scanner-config
+  namespace: pokemon-scanner
+data:
+  # Server Configuration
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  
+  # Gemini AI Configuration
+  GEMINI_MODEL: "models/gemini-2.5-flash-preview-05-20"
+  GEMINI_MAX_TOKENS: "2000"
+  GEMINI_TEMPERATURE: "0.1"
+  GEMINI_MAX_RETRIES: "3"
+  GEMINI_TIMEOUT_SECONDS: "60"
+  
+  # Image Processing Configuration
+  IMAGE_MAX_DIMENSION: "1024"
+  IMAGE_JPEG_QUALITY: "85"
+  IMAGE_MAX_FILE_SIZE_MB: "10"
+  IMAGE_MIN_DIMENSION: "400"
+  
+  # Caching Configuration
+  CACHE_ENABLED: "true"
+  CACHE_TTL_SECONDS: "3600"
+  CACHE_MAX_ENTRIES: "1000"
+  
+  # Rate Limiting
+  RATE_LIMIT_PER_MINUTE: "60"
+  RATE_LIMIT_BURST: "20"
+  RATE_LIMIT_ENABLED: "true"
+  
+  # Security Configuration
+  CORS_ORIGINS: "*"
+  ALLOWED_HOSTS: "*"
+  ENABLE_API_DOCS: "true"
+  
+  # Monitoring and Logging
+  LOG_LEVEL: "INFO"
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  ENABLE_COST_TRACKING: "true"
+  
+  # Static Files
+  SERVE_STATIC_FILES: "true"
+  STATIC_FILE_CACHE_AGE: "86400"
+  
+  # Health Checks
+  HEALTH_CHECK_INTERVAL: "30"
+  STARTUP_TIMEOUT: "60"
+  SHUTDOWN_TIMEOUT: "30"
