@@ -77,6 +77,111 @@ def save_processed_image(image_data: bytes, original_filename: str, stage: str =
         return None
 
 
+def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, Any]) -> int:
+    """
+    Calculate match score for a TCG card based on Gemini parameters.
+    
+    Args:
+        card_data: Card data from TCG API
+        gemini_params: Parsed parameters from Gemini
+        
+    Returns:
+        Match score (higher = better match)
+    """
+    score = 0
+    
+    # Card number match (highest priority) - exact match required
+    if gemini_params.get("number") and card_data.get("number"):
+        gemini_number = str(gemini_params["number"]).strip()
+        card_number = str(card_data["number"]).strip()
+        
+        if gemini_number == card_number:
+            score += 1000  # Very high score for exact number match
+        elif gemini_number in card_number or card_number in gemini_number:
+            score += 500   # Partial number match (e.g., "60" matches "SV60")
+    
+    # HP match (high priority)
+    if gemini_params.get("hp") and card_data.get("hp"):
+        gemini_hp = str(gemini_params["hp"]).strip()
+        card_hp = str(card_data["hp"]).strip()
+        
+        if gemini_hp == card_hp:
+            score += 200
+    
+    # Types match (medium priority)
+    card_types = card_data.get("types", [])
+    gemini_types = gemini_params.get("types", [])
+    if gemini_types and card_types:
+        # Count matching types
+        matching_types = len([t for t in gemini_types if t in card_types])
+        score += matching_types * 50
+    
+    # Set name match (already handled by search, but good to verify)
+    if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
+        gemini_set = gemini_params["set_name"].lower().strip()
+        card_set = card_data["set"]["name"].lower().strip()
+        
+        if gemini_set == card_set:
+            score += 100
+        elif gemini_set in card_set or card_set in gemini_set:
+            score += 50
+    
+    # Name similarity (should already match from search, but verify)
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = gemini_params["name"].lower().strip()
+        card_name = card_data["name"].lower().strip()
+        
+        if gemini_name == card_name:
+            score += 100
+        elif gemini_name in card_name or card_name in gemini_name:
+            score += 50
+    
+    return score
+
+
+def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Select the best matching card from TCG results based on Gemini parameters.
+    
+    Args:
+        tcg_results: List of card data from TCG API
+        gemini_params: Parsed parameters from Gemini
+        
+    Returns:
+        Best matching card data or None
+    """
+    if not tcg_results:
+        return None
+    
+    best_score = -1
+    best_match = None
+    match_details = []
+    
+    for card_data in tcg_results:
+        score = calculate_match_score(card_data, gemini_params)
+        match_details.append({
+            "card_id": card_data.get("id"),
+            "card_name": card_data.get("name"),
+            "card_number": card_data.get("number"),
+            "card_hp": card_data.get("hp"),
+            "score": score,
+        })
+        
+        if score > best_score:
+            best_score = score
+            best_match = card_data
+    
+    # Log the scoring details for debugging
+    logger.info(f"🎯 Best match scoring:")
+    for details in sorted(match_details, key=lambda x: x["score"], reverse=True):
+        logger.info(f"   {details['card_name']} #{details['card_number']} (ID: {details['card_id']}) - Score: {details['score']}")
+    
+    if best_match:
+        logger.info(f"✅ Selected best match: {best_match.get('name')} #{best_match.get('number')} (Score: {best_score})")
+    
+    return best_match
+
+
 def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
     """
     Parse Gemini's response to extract structured TCG search parameters.
@@ -300,6 +405,7 @@ async def scan_pokemon_card(request: ScanRequest):
         
         tcg_matches = []
         search_attempts = []
+        best_match_card = None
         
         if parsed_data.get("name"):
             # Strategy 1: Try exact match with all parameters
@@ -402,8 +508,9 @@ async def scan_pokemon_card(request: ScanRequest):
             for attempt in search_attempts:
                 logger.info(f"   📊 {attempt['strategy']}: {attempt['results']} results")
             
-            # Convert to PokemonCard objects
-            for card_data in tcg_results.get("data", []):
+            # Convert to PokemonCard objects and find best match
+            tcg_card_data = tcg_results.get("data", [])
+            for card_data in tcg_card_data:
                 tcg_matches.append(PokemonCard(
                     id=card_data["id"],
                     name=card_data["name"],
@@ -415,6 +522,16 @@ async def scan_pokemon_card(request: ScanRequest):
                     images=card_data.get("images"),
                     market_prices=card_data.get("tcgplayer", {}).get("prices") if card_data.get("tcgplayer") else None,
                 ))
+            
+            # Select the best match using intelligent scoring
+            best_match_data = select_best_match(tcg_card_data, parsed_data)
+            best_match_card = None
+            if best_match_data:
+                # Find the corresponding PokemonCard object
+                for card in tcg_matches:
+                    if card.id == best_match_data["id"]:
+                        best_match_card = card
+                        break
             
             # Track TCG usage
             if request.options.include_cost_tracking and config.enable_cost_tracking:
@@ -451,7 +568,7 @@ async def scan_pokemon_card(request: ScanRequest):
             success=True,
             card_identification=gemini_analysis,
             tcg_matches=tcg_matches if tcg_matches else None,
-            best_match=tcg_matches[0] if tcg_matches else None,
+            best_match=best_match_card,
             processing_info=ProcessingInfo(**processing_info),
             cost_info=cost_info,
         )
