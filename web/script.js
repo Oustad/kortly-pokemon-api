@@ -403,7 +403,7 @@ function displayQualityFeedback(processing) {
         qualitySection = document.createElement('div');
         qualitySection.id = 'qualityFeedbackCard';
         qualitySection.className = 'result-card';
-        qualitySection.innerHTML = '<h3>🎯 Quality Assessment</h3><div id="qualityFeedbackContent"></div>';
+        qualitySection.innerHTML = '<h3>🎯 Image Quality Assessment</h3><div id="qualityFeedbackContent"></div>';
         
         // Insert after processed images section
         const processedSection = document.getElementById('processedImagesCard');
