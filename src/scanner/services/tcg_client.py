@@ -41,7 +41,67 @@ class PokemonTcgClient:
     - Simple in-memory caching
     - Automatic retry with exponential backoff
     - Comprehensive error handling
+    - Set name mapping for common discrepancies
     """
+    
+    # Mapping from common Gemini set names to actual TCG API set names
+    SET_NAME_MAPPINGS = {
+        "Hidden Fates": "Hidden Fates Shiny Vault",
+        "Shining Legends": "Shining Legends",
+        "Dragon Majesty": "Dragon Majesty",
+        "Detective Pikachu": "Detective Pikachu",
+        "Team Up": "Team Up",
+        "Unbroken Bonds": "Unbroken Bonds",
+        "Unified Minds": "Unified Minds",
+        "Cosmic Eclipse": "Cosmic Eclipse",
+        "Sword & Shield": "Sword & Shield",
+        "Rebel Clash": "Rebel Clash",
+        "Darkness Ablaze": "Darkness Ablaze",
+        "Champions Path": "Champion's Path",
+        "Vivid Voltage": "Vivid Voltage",
+        "Shining Fates": "Shining Fates",
+        "Battle Styles": "Battle Styles",
+        "Chilling Reign": "Chilling Reign",
+        "Evolving Skies": "Evolving Skies",
+        "Celebrations": "Celebrations",
+        "Fusion Strike": "Fusion Strike",
+        "Brilliant Stars": "Brilliant Stars",
+        "Astral Radiance": "Astral Radiance",
+        "Pokemon Go": "Pokémon GO",
+        "Lost Origin": "Lost Origin",
+        "Silver Tempest": "Silver Tempest",
+        "Crown Zenith": "Crown Zenith",
+        # Base sets variations
+        "Base Set": "Base",
+        "Base Set 2": "Base Set 2",
+        "Jungle": "Jungle",
+        "Fossil": "Fossil",
+        "Team Rocket": "Team Rocket",
+        "Gym Heroes": "Gym Heroes",
+        "Gym Challenge": "Gym Challenge",
+        # Sun & Moon series
+        "Sun & Moon": "Sun & Moon",
+        "Guardians Rising": "Guardians Rising",
+        "Burning Shadows": "Burning Shadows",
+        "Crimson Invasion": "Crimson Invasion",
+        "Ultra Prism": "Ultra Prism",
+        "Forbidden Light": "Forbidden Light",
+        "Celestial Storm": "Celestial Storm",
+        "Lost Thunder": "Lost Thunder",
+        # XY series
+        "XY": "XY",
+        "Flashfire": "Flashfire",
+        "Furious Fists": "Furious Fists",
+        "Phantom Forces": "Phantom Forces",
+        "Primal Clash": "Primal Clash",
+        "Roaring Skies": "Roaring Skies",
+        "Ancient Origins": "Ancient Origins",
+        "BREAKthrough": "BREAKthrough",
+        "BREAKpoint": "BREAKpoint",
+        "Fates Collide": "Fates Collide",
+        "Steam Siege": "Steam Siege",
+        "Evolutions": "Evolutions",
+    }
 
     def __init__(
         self,
@@ -218,17 +278,23 @@ class PokemonTcgClient:
             "pageSize": min(page_size, 250),  # API max is 250
         }
         
-        # Build query string
+        # Build query string with normalization
         query_parts = []
         if name:
+            # Normalize Pokemon name for better matching
+            normalized_name = self._normalize_pokemon_name(name)
             if fuzzy:
-                query_parts.append(f'name:"{name}*"')
+                query_parts.append(f'name:"{normalized_name}*"')
             else:
-                query_parts.append(f'name:"{name}"')
+                query_parts.append(f'name:"{normalized_name}"')
         if set_name:
-            query_parts.append(f'set.name:"{set_name}"')
+            # Map the set name to handle common discrepancies
+            mapped_set_name = self._map_set_name(set_name)
+            query_parts.append(f'set.name:"{mapped_set_name}"')
         if number:
-            query_parts.append(f'number:{number}')
+            # Normalize card number
+            normalized_number = self._normalize_card_number(number)
+            query_parts.append(f'number:{normalized_number}')
         if supertype:
             query_parts.append(f'supertype:{supertype}')
         if types:
@@ -322,3 +388,91 @@ class PokemonTcgClient:
             "rate_limit": self.rate_limit,
             "remaining_requests": max(0, self.rate_limit - len(recent_requests)),
         }
+    
+    def _map_set_name(self, set_name: Optional[str]) -> Optional[str]:
+        """
+        Map common Gemini set names to actual TCG API set names.
+        
+        Args:
+            set_name: Set name from Gemini output
+            
+        Returns:
+            Mapped set name if found, otherwise original set name
+        """
+        if not set_name:
+            return set_name
+            
+        # Check direct mapping first
+        if set_name in self.SET_NAME_MAPPINGS:
+            mapped_name = self.SET_NAME_MAPPINGS[set_name]
+            logger.info(f"🗺️ Mapped set name: '{set_name}' → '{mapped_name}'")
+            return mapped_name
+        
+        # Check case-insensitive mapping
+        for gemini_name, tcg_name in self.SET_NAME_MAPPINGS.items():
+            if set_name.lower() == gemini_name.lower():
+                logger.info(f"🗺️ Mapped set name (case-insensitive): '{set_name}' → '{tcg_name}'")
+                return tcg_name
+        
+        # No mapping found, return original
+        return set_name
+    
+    def _normalize_pokemon_name(self, name: Optional[str]) -> Optional[str]:
+        """
+        Normalize Pokemon names to handle common variations between Gemini and TCG API.
+        
+        Args:
+            name: Pokemon name from Gemini output
+            
+        Returns:
+            Normalized name for better matching
+        """
+        if not name:
+            return name
+        
+        original_name = name
+        
+        # Handle GX/EX naming variations
+        # "Espeon GX" -> "Espeon-GX"
+        if " GX" in name:
+            name = name.replace(" GX", "-GX")
+            
+        # "Charizard EX" -> "Charizard-EX"  
+        if " EX" in name:
+            name = name.replace(" EX", "-EX")
+            
+        # "Pikachu V" -> "Pikachu V" (V cards don't use hyphen)
+        # "Charizard VMAX" -> "Charizard VMAX" (VMAX cards don't use hyphen)
+        
+        if name != original_name:
+            logger.info(f"🔤 Normalized Pokemon name: '{original_name}' → '{name}'")
+            
+        return name
+    
+    def _normalize_card_number(self, number: Optional[str]) -> Optional[str]:
+        """
+        Normalize card numbers to handle common variations.
+        
+        Args:
+            number: Card number from Gemini output
+            
+        Returns:
+            Normalized number for better matching
+        """
+        if not number:
+            return number
+            
+        original_number = number
+        
+        # Remove leading zeros (e.g., "060" -> "60")
+        if number.isdigit():
+            number = str(int(number))
+        
+        # Handle special cases where Gemini might miss prefixes
+        # For Hidden Fates Shiny Vault, numbers should have "SV" prefix
+        # But we'll let the search handle this with partial matching
+        
+        if number != original_number:
+            logger.info(f"🔢 Normalized card number: '{original_number}' → '{number}'")
+            
+        return number

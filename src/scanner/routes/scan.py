@@ -299,8 +299,11 @@ async def scan_pokemon_card(request: ScanRequest):
         tcg_start = time.time()
         
         tcg_matches = []
+        search_attempts = []
+        
         if parsed_data.get("name"):
-            # Try exact match first
+            # Strategy 1: Try exact match with all parameters
+            logger.info("🎯 Strategy 1: Exact search with all parameters")
             tcg_results = await tcg_client.search_cards(
                 name=parsed_data["name"],
                 set_name=parsed_data.get("set_name"),
@@ -310,16 +313,94 @@ async def scan_pokemon_card(request: ScanRequest):
                 page_size=10,
                 fuzzy=False,
             )
+            search_attempts.append({
+                "strategy": "exact_all_params",
+                "query": {
+                    "name": parsed_data["name"],
+                    "set_name": parsed_data.get("set_name"),
+                    "number": parsed_data.get("number"),
+                    "hp": parsed_data.get("hp"),
+                    "types": parsed_data.get("types"),
+                },
+                "results": len(tcg_results.get("data", [])),
+            })
             
-            # If no exact matches, try fuzzy search
-            if not tcg_results.get("data"):
-                logger.info("🔄 No exact matches, trying fuzzy search...")
+            # Strategy 2: If no exact matches, try name + set only
+            if not tcg_results.get("data") and parsed_data.get("set_name"):
+                logger.info("🔄 Strategy 2: Name + set only")
+                tcg_results = await tcg_client.search_cards(
+                    name=parsed_data["name"],
+                    set_name=parsed_data.get("set_name"),
+                    page_size=10,
+                    fuzzy=False,
+                )
+                search_attempts.append({
+                    "strategy": "name_set_only",
+                    "query": {
+                        "name": parsed_data["name"],
+                        "set_name": parsed_data.get("set_name"),
+                    },
+                    "results": len(tcg_results.get("data", [])),
+                })
+            
+            # Strategy 3: If still no matches, try fuzzy search with name + set
+            if not tcg_results.get("data") and parsed_data.get("set_name"):
+                logger.info("🔄 Strategy 3: Fuzzy search with name + set")
                 tcg_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
                     set_name=parsed_data.get("set_name"),
                     page_size=10,
                     fuzzy=True,
                 )
+                search_attempts.append({
+                    "strategy": "fuzzy_name_set",
+                    "query": {
+                        "name": parsed_data["name"],
+                        "set_name": parsed_data.get("set_name"),
+                    },
+                    "results": len(tcg_results.get("data", [])),
+                })
+            
+            # Strategy 4: Special case for Hidden Fates Shiny Vault numbers
+            if not tcg_results.get("data") and parsed_data.get("set_name") == "Hidden Fates" and parsed_data.get("number"):
+                logger.info("🔄 Strategy 4: Hidden Fates with SV prefix")
+                sv_number = f"SV{parsed_data['number']}"
+                tcg_results = await tcg_client.search_cards(
+                    name=parsed_data["name"],
+                    set_name=parsed_data.get("set_name"),
+                    number=sv_number,
+                    page_size=10,
+                    fuzzy=False,
+                )
+                search_attempts.append({
+                    "strategy": "hidden_fates_sv_prefix",
+                    "query": {
+                        "name": parsed_data["name"],
+                        "set_name": parsed_data.get("set_name"),
+                        "number": sv_number,
+                    },
+                    "results": len(tcg_results.get("data", [])),
+                })
+            
+            # Strategy 5: If still no matches, try fuzzy search with name only
+            if not tcg_results.get("data"):
+                logger.info("🔄 Strategy 5: Fuzzy search with name only")
+                tcg_results = await tcg_client.search_cards(
+                    name=parsed_data["name"],
+                    page_size=20,  # Increase page size for broader search
+                    fuzzy=True,
+                )
+                search_attempts.append({
+                    "strategy": "fuzzy_name_only",
+                    "query": {
+                        "name": parsed_data["name"],
+                    },
+                    "results": len(tcg_results.get("data", [])),
+                })
+            
+            # Log search strategy results
+            for attempt in search_attempts:
+                logger.info(f"   📊 {attempt['strategy']}: {attempt['results']} results")
             
             # Convert to PokemonCard objects
             for card_data in tcg_results.get("data", []):
@@ -344,6 +425,7 @@ async def scan_pokemon_card(request: ScanRequest):
             "processing_time_ms": int(tcg_time),
             "query": parsed_data,
             "matches_found": len(tcg_matches),
+            "search_attempts": search_attempts,
         }
         
         # Calculate total time
