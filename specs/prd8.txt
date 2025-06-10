@@ -1,0 +1,126 @@
+PRD8: Pokemon Card Scanner - Enhanced User Experience & Performance
+================================================================
+
+Status: PLANNING
+Created: 2025-06-10
+Previous: PRD7 (Speed Optimization - COMPLETED)
+
+## Overview
+
+This PRD captures the remaining enhancement items from PRD7's Phase 3 and deferred Phase 4 work.
+Focus on user experience improvements, performance monitoring, and system scalability.
+
+## Objectives
+
+1. Enable batch processing for multiple cards
+2. Implement intelligent caching for frequently scanned cards
+3. Add comprehensive performance monitoring
+4. Enhance error recovery and resilience
+5. Implement API rate limiting and quota management
+
+## Phase 1: Batch Processing Support
+
+### Requirements
+- Upload and process multiple card images in a single request
+- Parallel processing with progress tracking
+- Individual results for each card in the batch
+- Batch size limits (e.g., max 10 cards per batch)
+
+### Implementation
+- New `/api/v1/scan/batch` endpoint
+- Frontend multi-file selection and upload
+- Progress indicators for each card
+- Results gallery view
+
+## Phase 2: Intelligent Caching
+
+### Requirements
+- Cache frequently scanned cards to reduce API calls
+- LRU cache with configurable size
+- Cache invalidation strategy
+- Hit rate monitoring
+
+### Implementation
+- Redis or in-memory cache for card results
+- Cache key based on image hash
+- TTL configuration per tier
+- Cache warming for popular cards
+
+## Phase 3: Performance Monitoring
+
+### Requirements
+- Real-time performance metrics dashboard
+- Historical performance trends
+- API usage analytics
+- Cost tracking and reporting
+
+### Implementation
+- Prometheus metrics integration
+- Grafana dashboard
+- Custom metrics endpoints
+- Automated alerts for performance degradation
+
+## Phase 4: Enhanced Error Recovery
+
+### Requirements
+- Automatic retry with exponential backoff
+- Circuit breaker pattern for external APIs
+- Graceful degradation strategies
+- User-friendly error messages
+
+### Implementation
+- Tenacity retry decorators
+- Circuit breaker for Gemini/TCG APIs
+- Fallback responses
+- Error classification and handling
+
+## Phase 5: API Management
+
+### Requirements
+- Rate limiting per IP/user
+- API key management
+- Usage quotas and billing
+- Developer portal
+
+### Implementation
+- FastAPI rate limiter middleware
+- API key generation and validation
+- Usage tracking database
+- OpenAPI documentation
+
+## Phase 6: Backend Optimization
+
+### Requirements
+- Connection pooling for external APIs
+- Async processing optimization
+- Database query optimization
+- Resource utilization monitoring
+
+### Implementation
+- httpx connection pooling
+- Async task queuing
+- Database indexing
+- Performance profiling
+
+## Success Metrics
+
+- Batch processing: <10s for 5 cards
+- Cache hit rate: >60% for popular cards
+- API availability: >99.9% uptime
+- Error rate: <0.1% for valid requests
+- User satisfaction: >4.5/5 rating
+
+## Technical Debt from PRD7
+
+- Optimize backend async processing and connection pooling
+- Refactor image processor for better modularity
+- Add comprehensive integration tests
+- Documentation updates
+
+## Future Considerations
+
+- Mobile app development
+- ML model fine-tuning
+- Multi-language support
+- Trading platform integration
+- Community features
