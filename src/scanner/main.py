@@ -33,9 +33,9 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Pokemon Card Scanner API...")
     
-    # Verify configuration
+    # Verify configuration including API keys
     try:
-        config.validate()
+        config.validate(require_api_key=True)
         logger.info(f"✅ Configuration validated (Environment: {config.environment})")
     except ValueError as e:
         logger.error(f"❌ Configuration error: {e}")

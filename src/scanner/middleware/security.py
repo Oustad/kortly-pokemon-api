@@ -9,8 +9,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..config import get_config
 
-config = get_config()
-
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware to prevent abuse."""
@@ -21,6 +19,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.window = 60  # 1 minute window
     
     async def dispatch(self, request: Request, call_next: Callable):
+        config = get_config()
         if not config.rate_limit_enabled:
             return await call_next(request)
         
@@ -85,6 +84,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to add security headers to responses."""
     
     async def dispatch(self, request: Request, call_next: Callable):
+        config = get_config()
         response = await call_next(request)
         
         # Security headers

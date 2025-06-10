@@ -71,11 +71,11 @@ class Config:
         self.startup_timeout = int(os.getenv("STARTUP_TIMEOUT", "60"))
         self.shutdown_timeout = int(os.getenv("SHUTDOWN_TIMEOUT", "30"))
     
-    def validate(self):
+    def validate(self, require_api_key: bool = True):
         """Validate required configuration values."""
         errors = []
         
-        if not self.google_api_key:
+        if require_api_key and not self.google_api_key:
             errors.append("GOOGLE_API_KEY is required")
             
         if self.image_max_dimension < self.image_min_dimension:
@@ -133,5 +133,6 @@ class Config:
 def get_config() -> Config:
     """Get cached configuration instance."""
     config = Config()
-    config.validate()
+    # Only validate basic config during import, API key validation happens later
+    config.validate(require_api_key=False)
     return config
