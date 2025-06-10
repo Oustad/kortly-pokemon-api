@@ -622,7 +622,6 @@ async def scan_pokemon_card(request: ScanRequest):
         
         # Calculate total time even on error
         total_time = (time.time() - start_time) * 1000
-        processing_info["total_time_ms"] = int(total_time)
         
         # Prepare error context
         error_context = {
