@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..config import get_config
 from ..models.schemas import (
     CostInfo,
     ErrorResponse,
@@ -29,6 +30,7 @@ from ..services.tcg_client import PokemonTcgClient
 from ..utils.cost_tracker import CostTracker
 
 logger = logging.getLogger(__name__)
+config = get_config()
 
 router = APIRouter(prefix="/api/v1", tags=["scanner"])
 
@@ -332,7 +334,7 @@ async def scan_pokemon_card(request: ScanRequest):
                 ))
             
             # Track TCG usage
-            if request.options.include_cost_tracking:
+            if request.options.include_cost_tracking and config.enable_cost_tracking:
                 cost_tracker.track_tcg_usage("search")
         
         tcg_time = (time.time() - tcg_start) * 1000

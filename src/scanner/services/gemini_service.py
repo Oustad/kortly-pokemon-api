@@ -8,7 +8,10 @@ import google.generativeai as genai
 from google.api_core.exceptions import GoogleAPIError
 from PIL import Image
 
+from ..config import get_config
+
 logger = logging.getLogger(__name__)
+config = get_config()
 
 
 class GeminiService:
@@ -30,7 +33,7 @@ class GeminiService:
                 logger.warning(
                     "No Gemini API key provided. Set GOOGLE_API_KEY environment variable."
                 )
-            self._model = genai.GenerativeModel("models/gemini-2.5-flash-preview-05-20")
+            self._model = genai.GenerativeModel(config.gemini_model)
         return self._model
 
     async def identify_pokemon_card(
@@ -58,7 +61,7 @@ class GeminiService:
 
             if optimize_for_speed:
                 # Resize image to reduce processing time while maintaining quality
-                max_dimension = 800  # Optimized for speed
+                max_dimension = min(800, config.image_max_dimension)  # Use smaller of the two for speed
                 if max(pil_image.size) > max_dimension:
                     ratio = max_dimension / max(pil_image.size)
                     new_size = tuple(int(dim * ratio) for dim in pil_image.size)
@@ -89,12 +92,12 @@ Then provide brief analysis:
             if retry_unlimited:
                 # No token limit on retry
                 generation_config = genai.types.GenerationConfig(
-                    temperature=0.1,
+                    temperature=config.gemini_temperature,
                 )
             else:
                 generation_config = genai.types.GenerationConfig(
-                    max_output_tokens=2000,  # High limit to prevent truncation
-                    temperature=0.1,  # Lower temperature for consistency
+                    max_output_tokens=config.gemini_max_tokens,
+                    temperature=config.gemini_temperature,
                 )
 
             # Configure permissive safety settings for trading card analysis

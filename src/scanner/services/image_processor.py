@@ -10,7 +10,10 @@ from typing import Dict, Optional, Tuple
 
 from PIL import Image
 
+from ..config import get_config
+
 logger = logging.getLogger(__name__)
+config = get_config()
 
 # Try to import HEIC support
 try:
@@ -35,21 +38,21 @@ class ImageProcessor:
     
     def __init__(
         self,
-        max_dimension: int = 1024,
-        jpeg_quality: int = 85,
-        max_file_size_mb: int = 10,
+        max_dimension: Optional[int] = None,
+        jpeg_quality: Optional[int] = None,
+        max_file_size_mb: Optional[int] = None,
     ):
         """
         Initialize the image processor.
         
         Args:
-            max_dimension: Maximum width/height for processed images
-            jpeg_quality: JPEG compression quality (1-100)
-            max_file_size_mb: Maximum file size in megabytes
+            max_dimension: Maximum width/height for processed images (uses config if not provided)
+            jpeg_quality: JPEG compression quality (1-100) (uses config if not provided)
+            max_file_size_mb: Maximum file size in megabytes (uses config if not provided)
         """
-        self.max_dimension = max_dimension
-        self.jpeg_quality = jpeg_quality
-        self.max_file_size_mb = max_file_size_mb
+        self.max_dimension = max_dimension or config.image_max_dimension
+        self.jpeg_quality = jpeg_quality or config.image_jpeg_quality
+        self.max_file_size_mb = max_file_size_mb or config.image_max_file_size_mb
     
     def process_image(
         self,
@@ -207,8 +210,9 @@ class ImageProcessor:
             image = Image.open(BytesIO(image_data))
             
             # Check minimum dimensions
-            if image.width < 400 or image.height < 400:
-                return False, f"Image dimensions {image.width}x{image.height} are too small (minimum 400x400)"
+            min_dim = config.image_min_dimension
+            if image.width < min_dim or image.height < min_dim:
+                return False, f"Image dimensions {image.width}x{image.height} are too small (minimum {min_dim}x{min_dim})"
             
             # Check format
             if not HEIC_SUPPORTED and image.format == "HEIF":

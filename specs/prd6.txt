@@ -225,13 +225,10 @@ ERROR_WEBHOOK_ENVIRONMENT_TAG=production
 
 #### **4.5 Security Enhancements**
 - **Input validation** hardening
-- **Rate limiting** per IP address
-- **API key rotation** support
 - **Security headers** implementation
 - **Content Security Policy** configuration
 
 #### **4.6 Developer Experience**
-- **Development containers** (devcontainer.json)
 - **Hot reload** configuration for development
 - **Debug logging** modes
 - **API testing** collection updates
