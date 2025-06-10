@@ -157,23 +157,51 @@ async function scanCard() {
     document.getElementById('loadingSection').style.display = 'block';
     
     try {
+        let processedFile = selectedFile;
+        let resizeInfo = null;
+        
+        // Check if we should resize (skip for HEIC as they need server processing)
+        const isHeic = selectedFile.name.toLowerCase().endsWith('.heic') || 
+                       selectedFile.name.toLowerCase().endsWith('.heif') ||
+                       selectedFile.type === 'image/heic' ||
+                       selectedFile.type === 'image/heif';
+        
+        if (!isHeic && selectedFile.size > 100 * 1024) { // Only resize if > 100KB
+            updateLoadingStatus('Optimizing image for faster upload...');
+            resizeInfo = await resizeImage(selectedFile);
+            processedFile = resizeInfo.file;
+            
+            // Show compression info
+            if (resizeInfo.compressionRatio > 0) {
+                console.log(`📦 Image optimized: ${resizeInfo.compressionRatio}% size reduction`);
+                console.log(`📏 Resized from ${resizeInfo.originalDimensions.width}x${resizeInfo.originalDimensions.height} to ${resizeInfo.dimensions.width}x${resizeInfo.dimensions.height}`);
+            }
+        }
+        
         // Update loading status
         updateLoadingStatus('Converting image to base64...');
-        const base64 = await fileToBase64(selectedFile);
+        const base64 = await fileToBase64(processedFile);
         
-        // Prepare request
+        // Prepare request with optimization info
         const requestData = {
             image: base64.split(',')[1], // Remove data URL prefix
             filename: selectedFile.name,
             options: {
                 optimize_for_speed: document.getElementById('optimizeSpeed').checked,
                 include_cost_tracking: document.getElementById('trackCost').checked,
-                retry_on_truncation: true
+                retry_on_truncation: true,
+                prefer_speed: document.getElementById('optimizeSpeed').checked,
+                max_processing_time: document.getElementById('optimizeSpeed').checked ? 1500 : null
             }
         };
         
-        // Update loading status
-        updateLoadingStatus('Analyzing card with AI...');
+        // Update loading status with processing tier info
+        const optimizeSpeed = document.getElementById('optimizeSpeed').checked;
+        if (optimizeSpeed) {
+            updateLoadingStatus('Fast processing mode - analyzing card...');
+        } else {
+            updateLoadingStatus('High quality mode - analyzing card thoroughly...');
+        }
         
         // Call API
         const response = await fetch('/api/v1/scan', {
@@ -191,6 +219,10 @@ async function scanCard() {
         }
         
         if (data.success) {
+            // Add client-side optimization info to results
+            if (resizeInfo) {
+                data.clientOptimization = resizeInfo;
+            }
             displayResults(data);
         } else {
             throw new Error(data.error || 'Scan failed');
@@ -210,8 +242,11 @@ function displayResults(data) {
     // Display summary
     displaySummary(data);
     
-    // Display processed images for comparison
-    displayProcessedImages(data.processing_info);
+    // Display processed images for comparison  
+    displayProcessedImages(data.processing_info || data.processing);
+    
+    // Display quality feedback (new!)
+    displayQualityFeedback(data.processing);
     
     // Display Gemini identification
     displayIdentification(data.card_identification);
@@ -276,16 +311,144 @@ function displayProcessedImages(processingInfo) {
     }
 }
 
+function displayQualityFeedback(processing) {
+    if (!processing?.quality_feedback) return;
+    
+    // Find or create the quality feedback section
+    let qualitySection = document.getElementById('qualityFeedbackCard');
+    
+    if (!qualitySection) {
+        qualitySection = document.createElement('div');
+        qualitySection.id = 'qualityFeedbackCard';
+        qualitySection.className = 'result-card';
+        qualitySection.innerHTML = '<h3>🎯 Quality Assessment</h3><div id="qualityFeedbackContent"></div>';
+        
+        // Insert after processed images section
+        const processedSection = document.getElementById('processedImagesCard');
+        if (processedSection) {
+            processedSection.insertAdjacentElement('afterend', qualitySection);
+        } else {
+            // Fallback: insert after summary
+            const summaryCard = document.querySelector('.summary-card');
+            summaryCard.insertAdjacentElement('afterend', qualitySection);
+        }
+    }
+    
+    const content = document.getElementById('qualityFeedbackContent');
+    const feedback = processing.quality_feedback;
+    
+    // Overall quality rating
+    const qualityScore = Math.round(processing.quality_score || 0);
+    const qualityClass = getQualityClass(processing.quality_score);
+    
+    let feedbackHtml = `
+        <div class="quality-overview">
+            <div class="quality-score ${qualityClass}">
+                <div class="score-value">${qualityScore}/100</div>
+                <div class="score-label">Overall Quality: ${feedback.overall}</div>
+            </div>
+        </div>
+    `;
+    
+    // Processing details
+    feedbackHtml += `
+        <div class="processing-details">
+            <div class="detail-item">
+                <span class="detail-label">Processing Tier:</span>
+                <span class="detail-value tier-${processing.processing_tier}">${processing.processing_tier?.toUpperCase()}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Model Used:</span>
+                <span class="detail-value">${processing.model_used || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Image Enhanced:</span>
+                <span class="detail-value">${processing.image_enhanced ? 'Yes' : 'No'}</span>
+            </div>
+        </div>
+    `;
+    
+    // Issues and suggestions
+    if (feedback.issues?.length > 0) {
+        feedbackHtml += '<div class="feedback-section"><h4>⚠️ Quality Issues</h4><ul class="feedback-list issues">';
+        feedback.issues.forEach(issue => {
+            feedbackHtml += `<li>${issue}</li>`;
+        });
+        feedbackHtml += '</ul></div>';
+    }
+    
+    if (feedback.suggestions?.length > 0) {
+        feedbackHtml += '<div class="feedback-section"><h4>💡 Suggestions</h4><ul class="feedback-list suggestions">';
+        feedback.suggestions.forEach(suggestion => {
+            feedbackHtml += `<li>${suggestion}</li>`;
+        });
+        feedbackHtml += '</ul></div>';
+    }
+    
+    // Processing log (for debugging)
+    if (processing.processing_log?.length > 0) {
+        feedbackHtml += `
+            <details class="processing-log">
+                <summary>🔧 Processing Log</summary>
+                <div class="log-content">
+                    ${processing.processing_log.map(entry => `<div class="log-entry">${entry}</div>`).join('')}
+                </div>
+            </details>
+        `;
+    }
+    
+    content.innerHTML = feedbackHtml;
+}
+
+function getQualityClass(score) {
+    if (score >= 80) return 'excellent';
+    if (score >= 60) return 'good';
+    if (score >= 40) return 'fair';
+    return 'poor';
+}
+
 function displaySummary(data) {
     const summaryGrid = document.getElementById('summaryGrid');
     summaryGrid.innerHTML = '';
     
+    // Quality score (new!)
+    if (data.processing?.quality_score !== undefined) {
+        const qualityItem = createSummaryItem(
+            `${Math.round(data.processing.quality_score)}`,
+            'Quality Score',
+            getQualityColor(data.processing.quality_score)
+        );
+        summaryGrid.appendChild(qualityItem);
+    }
+    
+    // Processing tier (new!)
+    if (data.processing?.processing_tier) {
+        const tierItem = createSummaryItem(
+            data.processing.processing_tier.charAt(0).toUpperCase() + data.processing.processing_tier.slice(1),
+            'Processing Tier',
+            getTierColor(data.processing.processing_tier)
+        );
+        summaryGrid.appendChild(tierItem);
+    }
+    
     // Processing time
+    const processingTime = data.processing?.actual_time_ms || data.processing_info?.total_time_ms || 0;
     const timeItem = createSummaryItem(
-        `${data.processing_info.total_time_ms}ms`,
-        'Processing Time'
+        `${Math.round(processingTime)}ms`,
+        'Processing Time',
+        getTimeColor(processingTime, data.processing?.target_time_ms)
     );
     summaryGrid.appendChild(timeItem);
+    
+    // Performance rating (new!)
+    if (data.processing?.performance_rating) {
+        const perfItem = createSummaryItem(
+            data.processing.performance_rating.charAt(0).toUpperCase() + data.processing.performance_rating.slice(1),
+            'Performance',
+            getPerformanceColor(data.processing.performance_rating)
+        );
+        summaryGrid.appendChild(perfItem);
+    }
     
     // Cost
     if (data.cost_info) {
@@ -312,16 +475,65 @@ function displaySummary(data) {
         );
         summaryGrid.appendChild(confidenceItem);
     }
+    
+    // Client optimization info
+    if (data.clientOptimization && data.clientOptimization.compressionRatio > 0) {
+        const compressionItem = createSummaryItem(
+            `${data.clientOptimization.compressionRatio}%`,
+            'Size Reduced',
+            '#10b981' // Green for good optimization
+        );
+        summaryGrid.appendChild(compressionItem);
+    }
 }
 
-function createSummaryItem(value, label) {
+function createSummaryItem(value, label, color = null) {
     const div = document.createElement('div');
     div.className = 'summary-item';
+    
+    const valueStyle = color ? `style="color: ${color}; font-weight: bold;"` : '';
+    
     div.innerHTML = `
-        <div class="summary-value">${value}</div>
+        <div class="summary-value" ${valueStyle}>${value}</div>
         <div class="summary-label">${label}</div>
     `;
     return div;
+}
+
+// Color helper functions for quality indicators
+function getQualityColor(score) {
+    if (score >= 80) return '#10b981'; // Green - excellent
+    if (score >= 60) return '#f59e0b'; // Yellow - good  
+    if (score >= 40) return '#f97316'; // Orange - fair
+    return '#ef4444'; // Red - poor
+}
+
+function getTierColor(tier) {
+    switch (tier) {
+        case 'fast': return '#10b981'; // Green - fast
+        case 'standard': return '#3b82f6'; // Blue - standard
+        case 'enhanced': return '#8b5cf6'; // Purple - enhanced
+        default: return '#6b7280'; // Gray - unknown
+    }
+}
+
+function getTimeColor(actualTime, targetTime) {
+    if (!targetTime) return null;
+    const ratio = actualTime / targetTime;
+    if (ratio <= 0.8) return '#10b981'; // Green - excellent
+    if (ratio <= 1.0) return '#f59e0b'; // Yellow - on target
+    if (ratio <= 1.5) return '#f97316'; // Orange - acceptable
+    return '#ef4444'; // Red - slow
+}
+
+function getPerformanceColor(rating) {
+    switch (rating) {
+        case 'excellent': return '#10b981'; // Green
+        case 'good': return '#f59e0b'; // Yellow
+        case 'acceptable': return '#f97316'; // Orange
+        case 'slow': return '#ef4444'; // Red
+        default: return '#6b7280'; // Gray
+    }
 }
 
 function displayIdentification(identification) {
@@ -449,7 +661,93 @@ function formatPrices(prices) {
     return parts.join(' | ') || 'N/A';
 }
 
-// Utility functions
+// Image processing utilities
+async function resizeImage(file, maxWidth = 1024, maxHeight = 1024, quality = 0.85) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = () => {
+            // Calculate new dimensions maintaining aspect ratio
+            let { width, height } = img;
+            
+            if (width > height) {
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width = (width * maxHeight) / height;
+                    height = maxHeight;
+                }
+            }
+            
+            // Set canvas dimensions
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Enable high-quality resizing
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // Draw resized image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Check WebP support and convert
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const resizedFile = new File([blob], file.name, { 
+                        type: blob.type,
+                        lastModified: Date.now()
+                    });
+                    resolve({
+                        file: resizedFile,
+                        originalSize: file.size,
+                        newSize: blob.size,
+                        compressionRatio: ((file.size - blob.size) / file.size * 100).toFixed(1),
+                        dimensions: { width, height },
+                        originalDimensions: { width: img.width, height: img.height }
+                    });
+                } else {
+                    // Fallback to original file if conversion fails
+                    resolve({
+                        file: file,
+                        originalSize: file.size,
+                        newSize: file.size,
+                        compressionRatio: '0',
+                        dimensions: { width: img.width, height: img.height },
+                        originalDimensions: { width: img.width, height: img.height }
+                    });
+                }
+            }, supportsWebP() ? 'image/webp' : 'image/jpeg', quality);
+        };
+        
+        img.onerror = () => {
+            // If image fails to load, return original file
+            resolve({
+                file: file,
+                originalSize: file.size,
+                newSize: file.size,
+                compressionRatio: '0',
+                dimensions: { width: 0, height: 0 },
+                originalDimensions: { width: 0, height: 0 }
+            });
+        };
+        
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+function supportsWebP() {
+    // Check WebP support
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    return canvas.toDataURL('image/webp').indexOf('image/webp') === 5;
+}
+
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
