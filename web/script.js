@@ -255,6 +255,59 @@ function displayResults(data) {
     displayMatches(data.tcg_matches, data.best_match);
 }
 
+function displayUploadedImage() {
+    // Find or create the uploaded image section
+    let uploadedSection = document.getElementById('uploadedImageCard');
+    
+    if (!uploadedSection) {
+        uploadedSection = document.createElement('div');
+        uploadedSection.id = 'uploadedImageCard';
+        uploadedSection.className = 'result-card';
+        uploadedSection.innerHTML = '<h3>📸 Your Upload</h3><div id="uploadedImageContent"></div>';
+        
+        // Insert after summary card
+        const summaryCard = document.querySelector('.summary-card');
+        summaryCard.insertAdjacentElement('afterend', uploadedSection);
+    }
+    
+    const content = document.getElementById('uploadedImageContent');
+    
+    if (selectedFile) {
+        const isHeic = selectedFile.name.toLowerCase().endsWith('.heic') || 
+                       selectedFile.name.toLowerCase().endsWith('.heif');
+        
+        if (isHeic) {
+            // Show HEIC placeholder
+            content.innerHTML = `
+                <div class="uploaded-image-container">
+                    <div class="heic-placeholder" style="display: flex; flex-direction: column; align-items: center; padding: 2rem; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                        <div style="font-size: 4rem; margin-bottom: 1rem;">📷</div>
+                        <div style="font-weight: bold; margin-bottom: 0.5rem;">HEIC Image: ${selectedFile.name}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">iPhone photos can't be previewed in browsers</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem;">Size: ${formatBytes(selectedFile.size)}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Show actual image preview from the preview section
+            const previewImg = document.getElementById('imagePreview');
+            const imgSrc = previewImg ? previewImg.src : '';
+            
+            content.innerHTML = `
+                <div class="uploaded-image-container">
+                    <img src="${imgSrc}" alt="Uploaded image" class="uploaded-image" style="max-width: 300px; max-height: 400px; object-fit: contain; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="margin-top: 1rem; text-align: center;">
+                        <div style="font-weight: bold;">${selectedFile.name}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Size: ${formatBytes(selectedFile.size)}</div>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        content.innerHTML = '<p style="color: var(--text-secondary);">No uploaded image available.</p>';
+    }
+}
+
 function displayProcessedImages(processingInfo) {
     // Find or create the processed images section
     let processedSection = document.getElementById('processedImagesCard');
@@ -265,7 +318,7 @@ function displayProcessedImages(processingInfo) {
         processedSection.className = 'result-card';
         processedSection.innerHTML = '<h3>📸 Image Processing</h3><div id="processedImagesContent"></div>';
         
-        // Insert after summary card
+        // Insert after summary card like in the old view
         const summaryCard = document.querySelector('.summary-card');
         summaryCard.insertAdjacentElement('afterend', processedSection);
     }
@@ -273,42 +326,71 @@ function displayProcessedImages(processingInfo) {
     const content = document.getElementById('processedImagesContent');
     content.innerHTML = '';
     
-    if (processingInfo?.image_processing?.original_path && processingInfo?.image_processing?.processed_path) {
-        const originalPath = processingInfo.image_processing.original_path;
-        const processedPath = processingInfo.image_processing.processed_path;
-        
-        // Extract filenames for API calls
-        const originalFilename = originalPath.split('/').pop();
-        const processedFilename = processedPath.split('/').pop();
-        
-        content.innerHTML = `
-            <div class="image-comparison">
-                <div class="comparison-item">
-                    <h4>Original Image</h4>
-                    <img src="/api/v1/processed-images/${originalFilename}" 
-                         alt="Original" 
-                         class="comparison-image" 
-                         loading="lazy">
-                    <p class="image-info">Format: ${processingInfo.image_processing.original_format || 'Unknown'}</p>
-                    <p class="image-info">Size: ${formatBytes(processingInfo.image_processing.original_size || 0)}</p>
-                </div>
-                <div class="comparison-arrow">➡️</div>
-                <div class="comparison-item">
-                    <h4>Processed Image</h4>
-                    <img src="/api/v1/processed-images/${processedFilename}" 
-                         alt="Processed" 
-                         class="comparison-image" 
-                         loading="lazy">
-                    <p class="image-info">Format: JPEG (optimized)</p>
-                    <p class="image-info">Size: ${formatBytes(processingInfo.image_processing.processed_size || 0)}</p>
-                    ${processingInfo.image_processing.resized ? '<p class="image-info">✅ Resized for optimal processing</p>' : ''}
-                    ${processingInfo.image_processing.orientation_corrected ? '<p class="image-info">✅ Orientation corrected</p>' : ''}
-                </div>
-            </div>
-        `;
-    } else {
-        content.innerHTML = '<p style="color: var(--text-secondary);">Image processing information not available.</p>';
-    }
+    // Try to fetch the latest processed images from the API
+    fetch('/api/v1/processed-images/list')
+        .then(response => response.json())
+        .then(data => {
+            if (data.images && data.images.length > 0) {
+                // Get the most recent images (first 2 of each type)
+                const recentImages = data.images.slice(0, 6);
+                // Check filename instead of stage since stage parsing is broken
+                const originalImage = recentImages.find(img => img.filename.includes('_original_'));
+                const processedImage = recentImages.find(img => img.filename.includes('_processed_'));
+                
+                if (originalImage && processedImage) {
+                    // Classic side-by-side layout from old view
+                    content.innerHTML = `
+                        <div class="image-comparison" style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 2rem; align-items: center;">
+                            <div class="comparison-item" style="text-align: center;">
+                                <h4 style="margin-bottom: 1rem;">Original Image</h4>
+                                <div style="background: #f8f9fa; padding: 2rem; border-radius: 8px; margin-bottom: 1rem;">
+                                    <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">Original</div>
+                                    <div style="color: #666; font-size: 0.9rem;">Format: ${selectedFile?.name?.toLowerCase().endsWith('.heic') ? 'HEIF' : 'Unknown'}</div>
+                                    <div style="color: #666; font-size: 0.9rem;">Size: ${selectedFile ? formatBytes(selectedFile.size) : 'Unknown'}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="comparison-arrow" style="font-size: 2rem; color: #007bff;">➡️</div>
+                            
+                            <div class="comparison-item" style="text-align: center;">
+                                <h4 style="margin-bottom: 1rem;">Processed Image</h4>
+                                <img src="${processedImage.url}" 
+                                     alt="Processed" 
+                                     class="comparison-image" 
+                                     loading="lazy"
+                                     style="max-width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1rem;">
+                                <div style="color: #666; font-size: 0.9rem;">Format: JPEG (optimized)</div>
+                                <div style="color: #666; font-size: 0.9rem;">Size: ${formatBytes(processedImage.size)}</div>
+                                <div style="color: #28a745; font-size: 0.9rem; margin-top: 0.5rem;">✅ Resized for optimal processing</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (originalImage || processedImage) {
+                    // Show what we have
+                    const image = originalImage || processedImage;
+                    content.innerHTML = `
+                        <div style="text-align: center;">
+                            <h4>${image.filename.includes('_original_') ? 'Original Image' : 'Processed Image'}</h4>
+                            <img src="${image.url}" 
+                                 alt="${image.stage}" 
+                                 class="comparison-image" 
+                                 loading="lazy"
+                                 style="max-width: 300px; max-height: 300px; object-fit: contain; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1rem;">
+                            <div style="color: #666; font-size: 0.9rem;">Size: ${formatBytes(image.size)}</div>
+                            <div style="color: #666; font-size: 0.9rem;">${new Date(image.modified * 1000).toLocaleTimeString()}</div>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = '<p style="color: var(--text-secondary);">No processed images found on server.</p>';
+                }
+            } else {
+                content.innerHTML = '<p style="color: var(--text-secondary);">No processed images available.</p>';
+            }
+        })
+        .catch(error => {
+            console.warn('Could not fetch processed images:', error);
+            content.innerHTML = '<p style="color: var(--text-secondary);">Image processing information not available.</p>';
+        });
 }
 
 function displayQualityFeedback(processing) {
@@ -476,6 +558,18 @@ function displaySummary(data) {
         summaryGrid.appendChild(confidenceItem);
     }
     
+    // Token usage (new!)
+    if (data.card_identification?.tokens_used) {
+        const tokens = data.card_identification.tokens_used;
+        const totalTokens = (tokens.prompt || 0) + (tokens.response || 0);
+        const tokenItem = createSummaryItem(
+            totalTokens.toString(),
+            'Tokens Used',
+            '#8b5cf6' // Purple for token info
+        );
+        summaryGrid.appendChild(tokenItem);
+    }
+    
     // Client optimization info
     if (data.clientOptimization && data.clientOptimization.compressionRatio > 0) {
         const compressionItem = createSummaryItem(
@@ -540,6 +634,36 @@ function displayIdentification(identification) {
     if (!identification) return;
     
     const geminiResult = document.getElementById('geminiResult');
+    geminiResult.innerHTML = ''; // Clear previous content
+    
+    // Token usage details
+    if (identification.tokens_used) {
+        const tokens = identification.tokens_used;
+        const totalTokens = (tokens.prompt || 0) + (tokens.response || 0);
+        
+        const tokenInfo = document.createElement('div');
+        tokenInfo.className = 'token-info';
+        tokenInfo.innerHTML = `
+            <div class="token-breakdown" style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary-color);">🎯 Token Usage</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6;">${tokens.prompt || 0}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Prompt Tokens</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6;">${tokens.response || 0}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Response Tokens</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6;">${totalTokens}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Total Tokens</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        geminiResult.appendChild(tokenInfo);
+    }
     
     // Show raw response
     const contentDiv = document.createElement('div');

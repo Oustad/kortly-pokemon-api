@@ -122,6 +122,16 @@ class GeminiService:
                         "finish_reason": finish_reason,
                     }
 
+                # Handle MAX_TOKENS specially - retry with unlimited tokens
+                if finish_reason == "MAX_TOKENS" and not retry_unlimited:
+                    logger.warning("⚠️ MAX_TOKENS hit, retrying with unlimited tokens...")
+                    return await self.identify_pokemon_card(
+                        image_bytes=image_bytes,
+                        optimize_for_speed=optimize_for_speed,
+                        retry_unlimited=True,
+                        processing_tier=processing_tier,
+                    )
+
                 # Check if we have valid content
                 if (
                     hasattr(candidate, "content")
@@ -137,7 +147,7 @@ class GeminiService:
                     )
 
                     if response_text:
-                        # Handle MAX_TOKENS as a successful partial response
+                        # Handle truncated responses
                         is_truncated = finish_reason == "MAX_TOKENS"
                         if is_truncated:
                             response_text += "\n\n[Response truncated due to length limit]"

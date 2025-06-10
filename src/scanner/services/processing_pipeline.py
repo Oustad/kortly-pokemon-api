@@ -125,7 +125,8 @@ class ProcessingPipeline:
                     'preprocess_ms': preprocess_time,
                     'gemini_ms': gemini_time,
                     'total_ms': total_time
-                }
+                },
+                processed_image_bytes
             )
             
         except Exception as e:
@@ -225,11 +226,12 @@ class ProcessingPipeline:
         tier_config: Dict,
         processing_log: list,
         total_time: float,
-        timing_breakdown: Dict
+        timing_breakdown: Dict,
+        processed_image_data: bytes = None
     ) -> Dict[str, Any]:
         """Create successful processing result."""
         
-        return {
+        result = {
             'success': True,
             'card_data': gemini_result,
             'processing': {
@@ -248,6 +250,12 @@ class ProcessingPipeline:
                 )
             }
         }
+        
+        # Include processed image data if available
+        if processed_image_data:
+            result['processed_image_data'] = processed_image_data
+            
+        return result
     
     def _create_error_result(
         self,

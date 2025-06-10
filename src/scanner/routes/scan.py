@@ -353,6 +353,21 @@ async def scan_pokemon_card(request: ScanRequest):
         
         # Extract Gemini result and parse for TCG search
         gemini_data = pipeline_result['card_data']
+        
+        # Check if Gemini processing was successful
+        if not gemini_data.get('success', False):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Gemini processing failed: {gemini_data.get('error', 'Unknown error')}",
+            )
+        
+        # Ensure response field exists before parsing
+        if 'response' not in gemini_data:
+            raise HTTPException(
+                status_code=500,
+                detail="Gemini response missing required data",
+            )
+        
         parsed_data = parse_gemini_response(gemini_data["response"])
         
         # Create Gemini analysis object
