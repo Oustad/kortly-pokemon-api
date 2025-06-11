@@ -52,14 +52,16 @@ class AccuracyTester:
         images_dir: Path,
         output_dir: Path,
         api_url: str = "http://localhost:8000",
-        max_concurrent: int = 3,
-        save_raw: bool = False
+        max_concurrent: int = 1,  # Reduced default to respect Gemini rate limits
+        save_raw: bool = False,
+        request_delay: float = 4.5  # Delay between requests in seconds
     ):
         self.images_dir = Path(images_dir)
         self.output_dir = Path(output_dir)
         self.api_url = api_url
         self.max_concurrent = max_concurrent
         self.save_raw = save_raw
+        self.request_delay = request_delay
         
         # Initialize components
         self.image_processor = ImageProcessor()
@@ -128,6 +130,7 @@ class AccuracyTester:
             f"🖼️  Total Images: {self.total_images}\n"
             f"⏭️  Remaining: {len(remaining_files)}\n"
             f"🔄 Concurrency: {self.max_concurrent}\n"
+            f"⏱️  Request Delay: {self.request_delay}s\n"
             f"💾 Save Raw Results: {'Yes' if self.save_raw else 'No'}",
             title="Test Configuration",
             border_style="blue"
@@ -228,16 +231,22 @@ class AccuracyTester:
         progress: Progress, 
         task: TaskID
     ) -> List[tuple]:
-        """Process a batch of images concurrently."""
-        # Prepare image data
-        image_data = []
+        """Process a batch of images with rate limiting."""
+        batch_results = []
+        
         for image_path in batch_files:
+            if self.should_stop:
+                break
+                
+            # Convert image to base64
             base64_data = self.image_processor.image_to_base64(image_path)
+            
             if base64_data:
-                image_data.append((base64_data, image_path.name))
+                # Process single image through API
+                result = await self.api_client.scan_card(base64_data, image_path.name)
             else:
-                # Add failed conversion result
-                failed_result = {
+                # Failed conversion result
+                result = {
                     "success": False,
                     "error": "Failed to convert image to base64",
                     "_test_metadata": {
@@ -246,39 +255,13 @@ class AccuracyTester:
                         "success": False
                     }
                 }
-                image_data.append((None, image_path.name))
-        
-        # Process batch through API
-        batch_results = []
-        
-        if image_data:
-            valid_data = [(data, name) for data, name in image_data if data is not None]
             
-            if valid_data:
-                api_results = await self.api_client.scan_multiple(
-                    valid_data, 
-                    max_concurrent=self.max_concurrent
-                )
-                
-                # Combine results
-                data_idx = 0
-                for i, (data, filename) in enumerate(image_data):
-                    if data is not None:
-                        result = api_results[data_idx]
-                        data_idx += 1
-                    else:
-                        result = {
-                            "success": False,
-                            "error": "Failed to process image",
-                            "_test_metadata": {
-                                "request_time_ms": 0,
-                                "status_code": 0,
-                                "success": False
-                            }
-                        }
-                    
-                    batch_results.append((result, filename))
-                    progress.update(task, advance=1)
+            batch_results.append((result, image_path.name))
+            progress.update(task, advance=1)
+            
+            # Add delay between requests to respect Gemini rate limits
+            if not self.should_stop and len(batch_results) < len(batch_files):
+                await asyncio.sleep(self.request_delay)
         
         return batch_results
     
@@ -391,8 +374,8 @@ async def main():
     parser.add_argument(
         "--max-concurrent", 
         type=int, 
-        default=3,
-        help="Maximum concurrent requests"
+        default=1,
+        help="Maximum concurrent requests (default: 1 for Gemini rate limits)"
     )
     parser.add_argument(
         "--resume", 
@@ -423,7 +406,8 @@ async def main():
         output_dir=args.output_dir,
         api_url=args.api_url,
         max_concurrent=args.max_concurrent,
-        save_raw=args.save_raw
+        save_raw=args.save_raw,
+        request_delay=4.5  # Fixed delay for Gemini rate limits
     )
     
     try:

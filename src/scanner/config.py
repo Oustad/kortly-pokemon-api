@@ -23,11 +23,15 @@ class Config:
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
         
         # Gemini AI Configuration
-        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-preview-05-20")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-1.5-flash")
         self.gemini_max_tokens = int(os.getenv("GEMINI_MAX_TOKENS", "2000"))
         self.gemini_temperature = float(os.getenv("GEMINI_TEMPERATURE", "0.1"))
         self.gemini_max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
         self.gemini_timeout_seconds = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "60"))
+        
+        # Gemini Rate Limiting (requests per minute)
+        self.gemini_rate_limit_rpm = int(os.getenv("GEMINI_RATE_LIMIT_RPM", "15"))
+        self.gemini_rate_limit_enabled = os.getenv("GEMINI_RATE_LIMIT_ENABLED", "true").lower() == "true"
         
         # Image Processing Configuration
         self.image_max_dimension = int(os.getenv("IMAGE_MAX_DIMENSION", "1024"))
