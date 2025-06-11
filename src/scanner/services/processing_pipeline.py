@@ -9,9 +9,10 @@ import io
 from .quality_assessment import QualityAssessment
 from .image_processor import ImageProcessor
 from .gemini_service import GeminiService
-from ..config import config
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
+config = get_config()
 
 
 class ProcessingPipeline:
