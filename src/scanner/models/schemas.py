@@ -97,7 +97,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str = Field(..., description="Service status")
     version: str = Field(..., description="API version")
-    services: Dict[str, bool] = Field(..., description="Service availability")
+    services: Dict[str, Any] = Field(..., description="Service availability and metrics")
 
 
 class ErrorResponse(BaseModel):
