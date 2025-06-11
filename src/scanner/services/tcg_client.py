@@ -432,6 +432,51 @@ class PokemonTcgClient:
         
         original_name = name
         
+        # Handle international name translations (common Gemini mistakes)
+        name_translations = {
+            # French names that Gemini sometimes outputs
+            "Goupix": "Vulpix",
+            "Reptincel": "Charmeleon", 
+            "Dracaufeu": "Charizard",
+            "Carapuce": "Squirtle",
+            "Carabaffe": "Wartortle",
+            "Tortank": "Blastoise",
+            "Chenipan": "Caterpie",
+            "Chrysacier": "Metapod",
+            "Papilusion": "Butterfree",
+            "Aspicot": "Weedle",
+            "Coconfort": "Kakuna",
+            "Dardargnan": "Beedrill",
+            "Roucool": "Pidgey",
+            "Roucoups": "Pidgeotto",
+            "Roucarnage": "Pidgeot",
+            "Rattata": "Rattata",  # Same in French
+            "Rattatac": "Raticate",
+            "Piafabec": "Spearow",
+            "Rapasdepic": "Fearow",
+            "Abo": "Ekans",
+            "Arbok": "Arbok",  # Same in French
+            "Pikachu": "Pikachu",  # Same in French
+            "Raichu": "Raichu",  # Same in French
+            # Japanese names (less common but possible)
+            "フシギダネ": "Bulbasaur",
+            "フシギソウ": "Ivysaur", 
+            "フシギバナ": "Venusaur",
+            "ヒトカゲ": "Charmander",
+            "リザード": "Charmeleon",
+            "リザードン": "Charizard",
+            "ゼニガメ": "Squirtle",
+            "カメール": "Wartortle",
+            "カメックス": "Blastoise",
+            "ピカチュウ": "Pikachu",
+            "ライチュウ": "Raichu",
+        }
+        
+        # Check for direct translation
+        if name in name_translations:
+            name = name_translations[name]
+            logger.info(f"🌍 Translated Pokemon name: '{original_name}' → '{name}'")
+        
         # Handle GX/EX naming variations
         # "Espeon GX" -> "Espeon-GX"
         if " GX" in name:
@@ -444,7 +489,7 @@ class PokemonTcgClient:
         # "Pikachu V" -> "Pikachu V" (V cards don't use hyphen)
         # "Charizard VMAX" -> "Charizard VMAX" (VMAX cards don't use hyphen)
         
-        if name != original_name:
+        if name != original_name and name not in name_translations.values():
             logger.info(f"🔤 Normalized Pokemon name: '{original_name}' → '{name}'")
             
         return name
