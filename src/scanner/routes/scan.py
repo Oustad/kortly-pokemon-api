@@ -92,13 +92,30 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     """
     score = 0
     
-    # Card number match (highest priority) - exact match required
+    # Name matching (very high priority for exact matches)
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = gemini_params["name"].lower().strip()
+        card_name = card_data["name"].lower().strip()
+        
+        # Exact name match gets highest priority
+        if gemini_name == card_name:
+            score += 2000  # Very high score for exact name match
+        # Penalize tag team cards when searching for single Pokemon
+        elif "&" in card_name and "&" not in gemini_name:
+            # Card is a tag team but search is for single Pokemon
+            if gemini_name in card_name:
+                score += 100  # Low score for partial match on tag team
+        # Normal partial matches
+        elif gemini_name in card_name or card_name in gemini_name:
+            score += 300
+    
+    # Card number match (high priority) - exact match required
     if gemini_params.get("number") and card_data.get("number"):
         gemini_number = str(gemini_params["number"]).strip()
         card_number = str(card_data["number"]).strip()
         
         if gemini_number == card_number:
-            score += 1000  # Very high score for exact number match
+            score += 1000  # High score for exact number match
         elif gemini_number in card_number or card_number in gemini_number:
             score += 500   # Partial number match (e.g., "60" matches "SV60")
     
@@ -108,7 +125,7 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
         card_hp = str(card_data["hp"]).strip()
         
         if gemini_hp == card_hp:
-            score += 200
+            score += 400
     
     # Types match (medium priority)
     card_types = card_data.get("types", [])
@@ -116,7 +133,7 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     if gemini_types and card_types:
         # Count matching types
         matching_types = len([t for t in gemini_types if t in card_types])
-        score += matching_types * 50
+        score += matching_types * 100
     
     # Set name match (already handled by search, but good to verify)
     if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
@@ -124,19 +141,13 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
         card_set = card_data["set"]["name"].lower().strip()
         
         if gemini_set == card_set:
-            score += 100
+            score += 200
         elif gemini_set in card_set or card_set in gemini_set:
-            score += 50
-    
-    # Name similarity (should already match from search, but verify)
-    if gemini_params.get("name") and card_data.get("name"):
-        gemini_name = gemini_params["name"].lower().strip()
-        card_name = card_data["name"].lower().strip()
-        
-        if gemini_name == card_name:
             score += 100
-        elif gemini_name in card_name or card_name in gemini_name:
-            score += 50
+    
+    # Bonus for Shiny Vault cards when appropriate
+    if card_data.get("number", "").startswith("SV") and gemini_params.get("set_name") == "Hidden Fates":
+        score += 300  # Bonus for Shiny Vault cards from Hidden Fates
     
     return score
 
