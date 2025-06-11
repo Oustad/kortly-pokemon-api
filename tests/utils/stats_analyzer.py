@@ -36,8 +36,9 @@ class StatsAnalyzer:
         
     def add_result(self, result: Dict[str, Any], filename: str):
         """Add a test result for analysis."""
-        # Extract card type information
-        card_type_info = result.get("card_identification", {}).get("card_type_info", {})
+        # Extract card type information (with safe defaults)
+        card_identification = result.get("card_identification") or {}
+        card_type_info = card_identification.get("card_type_info") or {}
         card_type = card_type_info.get("card_type", "unknown")
         is_pokemon_card = card_type_info.get("is_pokemon_card", False)
         card_side = card_type_info.get("card_side", "unknown")
@@ -45,17 +46,17 @@ class StatsAnalyzer:
         processed_result = {
             "filename": filename,
             "success": result.get("success", False),
-            "processing_time": result.get("_test_metadata", {}).get("request_time_ms", 0),
-            "status_code": result.get("_test_metadata", {}).get("status_code", 0),
+            "processing_time": (result.get("_test_metadata") or {}).get("request_time_ms", 0),
+            "status_code": (result.get("_test_metadata") or {}).get("status_code", 0),
             "error": result.get("error"),
-            "cost": result.get("cost_info", {}).get("total_cost", 0) if result.get("cost_info") else 0,
-            "quality_score": result.get("processing", {}).get("quality_score"),
-            "processing_tier": result.get("processing", {}).get("processing_tier"),
-            "model_used": result.get("processing", {}).get("model_used"),
-            "tcg_matches": len(result.get("tcg_matches", [])),
+            "cost": (result.get("cost_info") or {}).get("total_cost", 0),
+            "quality_score": (result.get("processing") or {}).get("quality_score"),
+            "processing_tier": (result.get("processing") or {}).get("processing_tier"),
+            "model_used": (result.get("processing") or {}).get("model_used"),
+            "tcg_matches": len(result.get("tcg_matches") or []),
             "best_match": result.get("best_match") is not None,
-            "language_detected": result.get("card_identification", {}).get("language_info", {}).get("detected_language"),
-            "translation_occurred": result.get("card_identification", {}).get("language_info", {}).get("is_translation", False),
+            "language_detected": card_identification.get("language_info", {}).get("detected_language"),
+            "translation_occurred": card_identification.get("language_info", {}).get("is_translation", False),
             # New card type fields
             "card_type": card_type,
             "is_pokemon_card": is_pokemon_card,
