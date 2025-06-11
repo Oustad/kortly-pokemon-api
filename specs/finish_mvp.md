@@ -36,6 +36,11 @@ The Pokemon Card Scanner MVP is feature-complete with excellent performance and 
   - [ ] Promo cards with unique numbering
   - [ ] Tag Team vs single Pokemon differentiation
   - [ ] Japanese cards (expected to fail gracefully)
+  - [ ] **Set identification accuracy** (specific test cases):
+    - [ ] IMG_5429.HEIC (Oranguru V - should be Astral Radiance, not Silver Tempest)
+    - [ ] Cards with similar set names (e.g., Base Set vs Base Set 2)
+    - [ ] Cards with worn set symbols or text
+    - [ ] Reprinted cards across multiple sets
 
 - [ ] **Image Quality Scenarios**
   - [ ] Perfect lighting conditions
@@ -125,13 +130,38 @@ The Pokemon Card Scanner MVP is feature-complete with excellent performance and 
 - Confusing UI elements
 - Performance bottlenecks
 
-### 3.2 Quick Improvements
+### 3.2 Set Detection Improvements (Based on Oranguru V test case)
+**Issue**: Gemini misidentified Astral Radiance as Silver Tempest, but fallback search still found correct card.
+
+**Improvements to implement**:
+1. **Enhanced Gemini Set Detection**
+   - Update prompts to focus more on set symbols and identifiers
+   - Add examples of common set naming patterns
+   - Emphasize accuracy over speed for set identification
+
+2. **Set Validation Logic**
+   - Cross-check card numbers against known set ranges
+   - Validate set/number combinations against TCG database
+   - Flag mismatches for manual review or auto-correction
+
+3. **Confidence Scoring for Sets**
+   - Add confidence ratings for set identification
+   - Prefer higher-confidence matches
+   - Show uncertainty indicators when confidence is low
+
+**Test Cases to Add**:
+- IMG_5429.HEIC (Oranguru V Astral Radiance vs Silver Tempest confusion)
+- Cards from sets with similar names
+- Cards with worn/unclear set identifiers
+- Reprints across multiple sets
+
+### 3.3 Quick Improvements
 - Better error messages
 - Loading state improvements
 - Result display enhancements
 - Mobile UI tweaks
 
-### 3.3 Configuration Tuning
+### 3.4 Configuration Tuning
 - Adjust quality score thresholds
 - Optimize processing timeouts
 - Fine-tune rate limits
@@ -248,6 +278,12 @@ When MVP is successfully launched:
 - Cards in protective sleeves
 - Multiple cards in one image
 - Non-card images for error testing
+- **Set identification edge cases**:
+  - IMG_5429.HEIC (Oranguru V set confusion case)
+  - Cards with similar set names
+  - Cards with worn/unclear set symbols
+  - Reprints in multiple sets
+  - Cards with multilingual text
 
 ### Test Scenarios Script
 1. First-time user flow
