@@ -9,6 +9,7 @@ import io
 from .quality_assessment import QualityAssessment
 from .image_processor import ImageProcessor
 from .gemini_service import GeminiService
+from ..config import config
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +26,18 @@ class ProcessingPipeline:
         self.tier_configs = {
             'fast': {
                 'max_size': (512, 512),
-                'model': 'gemini-2.5-flash',
                 'enhance_image': False,
                 'target_time_ms': 1000,
                 'quality_threshold': 80
             },
             'standard': {
                 'max_size': (768, 768),
-                'model': 'gemini-2.5-flash', 
                 'enhance_image': True,
                 'target_time_ms': 2000,
                 'quality_threshold': 50
             },
             'enhanced': {
                 'max_size': (1024, 1024),
-                'model': 'gemini-2.5-flash',  # Could use Pro if available
                 'enhance_image': True,
                 'target_time_ms': 4000,
                 'quality_threshold': 0
@@ -240,7 +238,7 @@ class ProcessingPipeline:
                 'processing_tier': tier,
                 'target_time_ms': tier_config['target_time_ms'],
                 'actual_time_ms': total_time,
-                'model_used': tier_config['model'],
+                'model_used': config.gemini_model,
                 'image_enhanced': tier_config['enhance_image'],
                 'timing_breakdown': timing_breakdown,
                 'processing_log': processing_log,
