@@ -209,15 +209,12 @@ class GeminiService:
         """Get tier-specific optimized prompt for faster processing."""
         
         if processing_tier == "fast":
-            # Ultra-minimal prompt for speed  
-            return """Analyze this image. Identify Pokemon cards and determine card type.
-
+            # Ultra-minimal prompt for speed
+            return """Pokemon card identification. Output format:
 TCG_SEARCH_START
-{"card_type": "pokemon_front", "is_pokemon_card": true, "card_side": "front", "name": "pokemon name", "original_name": "name as shown on card", "language": "en", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
+{"name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
 TCG_SEARCH_END
-
-If this is a Pokemon card back, use: "card_type": "pokemon_back", "card_side": "back"
-If this is not a Pokemon card, use: "card_type": "non_pokemon", "is_pokemon_card": false"""
+Brief: Name, set, condition."""
             
         elif processing_tier == "enhanced":
             # Comprehensive prompt for challenging images
@@ -260,16 +257,16 @@ Detailed analysis:
             
         else:  # standard tier
             # Balanced prompt for good performance
-            return """Analyze this image to identify the Pokemon card.
+            return """Identify this Pokemon card and provide search parameters.
 
+IMPORTANT: Detect if the card is in a non-English language and preserve original names.
+
+Format exactly:
 TCG_SEARCH_START
 {
-  "card_type": "pokemon_front",
-  "is_pokemon_card": true,
-  "card_side": "front",
   "name": "exact pokemon name",
   "original_name": "pokemon name exactly as shown on card",
-  "language": "en",
+  "language": "language code (en=English, fr=French, ja=Japanese, de=German, es=Spanish, etc)",
   "set_name": "set name if visible",
   "number": "card number if visible", 
   "hp": "HP value if visible",
@@ -277,15 +274,11 @@ TCG_SEARCH_START
 }
 TCG_SEARCH_END
 
-IMPORTANT: 
-- If this is a Pokemon card back, set "card_type": "pokemon_back" and "card_side": "back"
-- If this is not a Pokemon card, set "card_type": "non_pokemon" and "is_pokemon_card": false
-- For non-English cards, preserve original name and set correct language code
-
 Analysis:
-1. Card identification  
-2. Key features
-3. Condition"""
+1. Card identification
+2. Language detection notes
+3. Key features
+4. Condition and value"""
 
     def _get_generation_config(self, processing_tier: str, retry_unlimited: bool) -> genai.types.GenerationConfig:
         """Get tier-specific generation configuration for optimal performance."""
