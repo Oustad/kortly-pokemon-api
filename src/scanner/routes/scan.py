@@ -221,6 +221,50 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             # Clean up the extracted parameters
             cleaned_params = {}
             
+            # Extract card type information
+            card_type_info = {}
+            if 'card_type' in search_params and search_params['card_type']:
+                card_type = str(search_params['card_type']).strip().lower()
+                # Validate card type
+                valid_types = ['pokemon_front', 'pokemon_back', 'non_pokemon', 'unknown']
+                if card_type in valid_types:
+                    card_type_info['card_type'] = card_type
+                else:
+                    card_type_info['card_type'] = 'unknown'
+            else:
+                card_type_info['card_type'] = 'unknown'
+            
+            # Extract is_pokemon_card flag
+            if 'is_pokemon_card' in search_params:
+                is_pokemon = search_params['is_pokemon_card']
+                if isinstance(is_pokemon, bool):
+                    card_type_info['is_pokemon_card'] = is_pokemon
+                elif isinstance(is_pokemon, str):
+                    card_type_info['is_pokemon_card'] = is_pokemon.lower() in ['true', '1', 'yes']
+                else:
+                    card_type_info['is_pokemon_card'] = card_type_info['card_type'] in ['pokemon_front', 'pokemon_back']
+            else:
+                card_type_info['is_pokemon_card'] = card_type_info['card_type'] in ['pokemon_front', 'pokemon_back']
+            
+            # Extract card side
+            if 'card_side' in search_params and search_params['card_side']:
+                card_side = str(search_params['card_side']).strip().lower()
+                valid_sides = ['front', 'back', 'unknown']
+                if card_side in valid_sides:
+                    card_type_info['card_side'] = card_side
+                else:
+                    card_type_info['card_side'] = 'unknown'
+            else:
+                # Infer from card_type if not provided
+                if card_type_info['card_type'] == 'pokemon_front':
+                    card_type_info['card_side'] = 'front'
+                elif card_type_info['card_type'] == 'pokemon_back':
+                    card_type_info['card_side'] = 'back'
+                else:
+                    card_type_info['card_side'] = 'unknown'
+                    
+            cleaned_params['card_type_info'] = card_type_info
+            
             # Extract language information
             language_info = {}
             if 'language' in search_params and search_params['language']:
@@ -402,6 +446,12 @@ async def scan_pokemon_card(request: ScanRequest):
         
         parsed_data = parse_gemini_response(gemini_data["response"])
         
+        # Create card type info object
+        card_type_info = None
+        if parsed_data.get("card_type_info"):
+            from ..models.schemas import CardTypeInfo
+            card_type_info = CardTypeInfo(**parsed_data["card_type_info"])
+            
         # Create language info object
         language_info = None
         if parsed_data.get("language_info"):
@@ -412,6 +462,7 @@ async def scan_pokemon_card(request: ScanRequest):
         gemini_analysis = GeminiAnalysis(
             raw_response=gemini_data["response"],
             structured_data=parsed_data,
+            card_type_info=card_type_info,
             language_info=language_info,
             confidence=0.9 if parsed_data.get("name") else 0.5,
             tokens_used={
@@ -620,14 +671,49 @@ async def scan_pokemon_card(request: ScanRequest):
                 },
             )
         
+        # Determine success based on card type and results
+        scan_success = True
+        error_message = None
+        
+        if card_type_info:
+            card_type = card_type_info.card_type
+            
+            if card_type == "pokemon_front":
+                # Pokemon front cards should have TCG matches
+                scan_success = best_match_card is not None
+                if not scan_success:
+                    error_message = "Pokemon card identified but no TCG database matches found"
+                    
+            elif card_type == "pokemon_back":
+                # Pokemon back cards are true negatives - mark as successful identification
+                scan_success = True
+                error_message = None  # This is expected behavior
+                
+            elif card_type == "non_pokemon":
+                # Non-Pokemon cards are true negatives - mark as successful identification  
+                scan_success = True
+                error_message = None  # This is expected behavior
+                
+            elif card_type == "unknown":
+                # Unknown cards - consider failed if no data extracted
+                scan_success = parsed_data.get("name") is not None
+                if not scan_success:
+                    error_message = "Could not determine card type or extract card data"
+        else:
+            # Fallback to original logic if no card type info
+            scan_success = best_match_card is not None
+            if not scan_success:
+                error_message = "No card identification data extracted"
+
         # Prepare response
         response = ScanResponse(
-            success=True,
+            success=scan_success,
             card_identification=gemini_analysis,
             tcg_matches=tcg_matches if tcg_matches else None,
             best_match=best_match_card,
             processing=processing_info,
             cost_info=cost_info,
+            error=error_message,
         )
         
         total_time = processing_info.actual_time_ms

@@ -23,6 +23,13 @@ class ScanRequest(BaseModel):
     options: ScanOptions = Field(default_factory=ScanOptions)
 
 
+class CardTypeInfo(BaseModel):
+    """Card type detection information."""
+    card_type: str = Field(..., description="Card type: pokemon_front, pokemon_back, non_pokemon, unknown")
+    is_pokemon_card: bool = Field(..., description="Whether this is a Pokemon card")
+    card_side: str = Field(..., description="Card side: front, back, unknown")
+
+
 class LanguageInfo(BaseModel):
     """Language detection and translation information."""
     detected_language: str = Field(..., description="Detected language code (en, fr, ja, etc.)")
@@ -36,6 +43,7 @@ class GeminiAnalysis(BaseModel):
     """Gemini's analysis of the Pokemon card."""
     raw_response: str = Field(..., description="Full Gemini response")
     structured_data: Optional[Dict[str, Any]] = Field(None, description="Extracted structured data")
+    card_type_info: Optional[CardTypeInfo] = Field(None, description="Card type detection information")
     language_info: Optional[LanguageInfo] = Field(None, description="Language detection and translation info")
     confidence: Optional[float] = Field(None, description="Confidence score (0-1)")
     tokens_used: Optional[Dict[str, int]] = Field(None, description="Token usage")

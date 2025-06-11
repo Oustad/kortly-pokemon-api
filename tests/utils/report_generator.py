@@ -111,6 +111,33 @@ class ReportGenerator:
             )
             charts["quality_distribution"] = fig_quality.to_html(include_plotlyjs=False, div_id="quality_chart")
         
+        # Card type distribution
+        if metrics.card_type_distribution:
+            # Create friendly labels for card types
+            type_labels = {
+                'pokemon_front': 'Pokemon Front',
+                'pokemon_back': 'Pokemon Back', 
+                'non_pokemon': 'Non-Pokemon',
+                'unknown': 'Unknown'
+            }
+            
+            labels = [type_labels.get(k, k.title()) for k in metrics.card_type_distribution.keys()]
+            values = list(metrics.card_type_distribution.values())
+            colors = ['#10b981', '#ef4444', '#8b5cf6', '#6b7280']
+            
+            fig_types = go.Figure(data=[go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.3,
+                marker_colors=colors[:len(labels)]
+            )])
+            fig_types.update_layout(
+                title="Card Type Distribution",
+                height=400,
+                margin=dict(t=50, b=50, l=50, r=50)
+            )
+            charts["card_type_distribution"] = fig_types.to_html(include_plotlyjs=False, div_id="types_chart")
+        
         # Timing distribution histogram
         if metrics.timing_percentiles:
             # Create timing histogram using percentile data
@@ -248,6 +275,14 @@ class ReportGenerator:
                 <div class="metric-value">${{ "%.6f"|format(analysis.overall_metrics.avg_cost_per_scan) }}</div>
                 <div class="metric-label">Avg Cost Per Scan</div>
             </div>
+            <div class="metric-card">
+                <div class="metric-value" style="color: #3b82f6;">{{ "%.1f"|format(analysis.overall_metrics.adjusted_success_rate) }}%</div>
+                <div class="metric-label">Adjusted Success Rate (Pokemon Cards Only)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" style="color: #8b5cf6;">{{ analysis.overall_metrics.true_negatives }}</div>
+                <div class="metric-label">True Negatives (Card Backs + Non-Pokemon)</div>
+            </div>
         </div>
         
         {% if charts.success_rate %}
@@ -270,11 +305,19 @@ class ReportGenerator:
             {% endif %}
         </div>
         
-        {% if charts.timing_percentiles %}
-        <div class="chart-section">
-            {{ charts.timing_percentiles|safe }}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            {% if charts.card_type_distribution %}
+            <div class="chart-section">
+                {{ charts.card_type_distribution|safe }}
+            </div>
+            {% endif %}
+            
+            {% if charts.timing_percentiles %}
+            <div class="chart-section">
+                {{ charts.timing_percentiles|safe }}
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
         
         <div class="chart-section">
             <h3>📊 Detailed Statistics</h3>
@@ -302,6 +345,22 @@ class ReportGenerator:
                 <tr>
                     <td>Translations Performed</td>
                     <td>{{ analysis.language_analysis.translations_performed }} ({{ "%.1f"|format(analysis.language_analysis.translation_rate) }}%)</td>
+                </tr>
+                <tr>
+                    <td>Valid Attempts (Pokemon Front Cards)</td>
+                    <td>{{ analysis.overall_metrics.valid_attempts }}</td>
+                </tr>
+                <tr>
+                    <td>Adjusted Success Rate</td>
+                    <td>{{ "%.1f"|format(analysis.overall_metrics.adjusted_success_rate) }}%</td>
+                </tr>
+                <tr>
+                    <td>True Negatives</td>
+                    <td>{{ analysis.overall_metrics.true_negatives }} (Card backs + Non-Pokemon)</td>
+                </tr>
+                <tr>
+                    <td>False Negatives</td>
+                    <td>{{ analysis.overall_metrics.false_negatives }} (Failed Pokemon cards)</td>
                 </tr>
             </table>
         </div>

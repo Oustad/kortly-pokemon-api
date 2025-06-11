@@ -20,6 +20,12 @@ class TestMetrics:
     processing_tier_distribution: Dict[str, int]
     error_types: Dict[str, int]
     timing_percentiles: Dict[str, float]
+    # New card type metrics
+    card_type_distribution: Dict[str, int]
+    true_negatives: int
+    false_negatives: int
+    valid_attempts: int
+    adjusted_success_rate: float
 
 
 class StatsAnalyzer:
@@ -30,6 +36,12 @@ class StatsAnalyzer:
         
     def add_result(self, result: Dict[str, Any], filename: str):
         """Add a test result for analysis."""
+        # Extract card type information
+        card_type_info = result.get("card_identification", {}).get("card_type_info", {})
+        card_type = card_type_info.get("card_type", "unknown")
+        is_pokemon_card = card_type_info.get("is_pokemon_card", False)
+        card_side = card_type_info.get("card_side", "unknown")
+        
         processed_result = {
             "filename": filename,
             "success": result.get("success", False),
@@ -44,6 +56,12 @@ class StatsAnalyzer:
             "best_match": result.get("best_match") is not None,
             "language_detected": result.get("card_identification", {}).get("language_info", {}).get("detected_language"),
             "translation_occurred": result.get("card_identification", {}).get("language_info", {}).get("is_translation", False),
+            # New card type fields
+            "card_type": card_type,
+            "is_pokemon_card": is_pokemon_card,
+            "card_side": card_side,
+            "is_true_negative": card_type in ["pokemon_back", "non_pokemon"],
+            "is_valid_attempt": card_type == "pokemon_front",
         }
         self.results.append(processed_result)
     
@@ -55,7 +73,9 @@ class StatsAnalyzer:
                 success_rate=0.0, avg_processing_time=0.0,
                 total_cost=0.0, avg_cost_per_scan=0.0,
                 quality_distribution={}, processing_tier_distribution={},
-                error_types={}, timing_percentiles={}
+                error_types={}, timing_percentiles={},
+                card_type_distribution={}, true_negatives=0,
+                false_negatives=0, valid_attempts=0, adjusted_success_rate=0.0
             )
         
         total_images = len(self.results)
@@ -85,6 +105,26 @@ class StatsAnalyzer:
         # Timing percentiles
         timing_percentiles = self._calculate_timing_percentiles(processing_times)
         
+        # Card type analysis
+        card_type_counts = Counter(r["card_type"] for r in self.results)
+        card_type_distribution = dict(card_type_counts)
+        
+        # True negatives (card backs and non-Pokemon cards that were correctly identified)
+        true_negatives = sum(1 for r in self.results if r["is_true_negative"] and r["success"])
+        
+        # Valid attempts (Pokemon front cards)
+        valid_attempts = sum(1 for r in self.results if r["is_valid_attempt"])
+        
+        # False negatives (Pokemon front cards that failed)
+        false_negatives = sum(1 for r in self.results if r["is_valid_attempt"] and not r["success"])
+        
+        # Adjusted success rate (only counting valid attempts)
+        if valid_attempts > 0:
+            successful_valid_attempts = sum(1 for r in self.results if r["is_valid_attempt"] and r["success"])
+            adjusted_success_rate = (successful_valid_attempts / valid_attempts) * 100
+        else:
+            adjusted_success_rate = 0.0
+        
         return TestMetrics(
             total_images=total_images,
             successful_scans=successful_scans,
@@ -96,7 +136,12 @@ class StatsAnalyzer:
             quality_distribution=quality_distribution,
             processing_tier_distribution=processing_tier_distribution,
             error_types=error_types,
-            timing_percentiles=timing_percentiles
+            timing_percentiles=timing_percentiles,
+            card_type_distribution=card_type_distribution,
+            true_negatives=true_negatives,
+            false_negatives=false_negatives,
+            valid_attempts=valid_attempts,
+            adjusted_success_rate=adjusted_success_rate
         )
     
     def _categorize_quality_scores(self, scores: List[float]) -> Dict[str, int]:
