@@ -221,7 +221,7 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             # Clean up the extracted parameters
             cleaned_params = {}
             
-            # Extract card type information
+            # Extract card type information (with fallback defaults)
             card_type_info = {}
             if 'card_type' in search_params and search_params['card_type']:
                 card_type = str(search_params['card_type']).strip().lower()
@@ -230,9 +230,9 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                 if card_type in valid_types:
                     card_type_info['card_type'] = card_type
                 else:
-                    card_type_info['card_type'] = 'unknown'
+                    card_type_info['card_type'] = 'pokemon_front'  # Default to Pokemon front for safety
             else:
-                card_type_info['card_type'] = 'unknown'
+                card_type_info['card_type'] = 'pokemon_front'  # Default assumption
             
             # Extract is_pokemon_card flag
             if 'is_pokemon_card' in search_params:
@@ -367,6 +367,18 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             if name and len(name) > 2:
                 search_params['name'] = name
                 break
+    
+    # Add default card type info for fallback parsing
+    if search_params:
+        search_params['card_type_info'] = {
+            'card_type': 'pokemon_front',  # Assume Pokemon front card
+            'is_pokemon_card': True,
+            'card_side': 'front'
+        }
+        search_params['language_info'] = {
+            'detected_language': 'en',
+            'is_translation': False
+        }
     
     logger.info(f"📋 Fallback extracted TCG search parameters: {search_params}")
     return search_params
