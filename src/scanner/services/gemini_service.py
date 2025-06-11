@@ -212,7 +212,7 @@ class GeminiService:
             # Ultra-minimal prompt for speed
             return """Pokemon card identification. Output format:
 TCG_SEARCH_START
-{"name": "pokemon name", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
+{"name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
 TCG_SEARCH_END
 Brief: Name, set, condition."""
             
@@ -220,10 +220,14 @@ Brief: Name, set, condition."""
             # Comprehensive prompt for challenging images
             return """Analyze this Pokemon card image carefully. If the image quality is poor, do your best to identify visible elements.
 
+IMPORTANT: Detect the card language and preserve original names.
+
 Required format:
 TCG_SEARCH_START
 {
   "name": "exact pokemon name from card",
+  "original_name": "pokemon name exactly as written on the card", 
+  "language": "card language code (en=English, fr=French, ja=Japanese, de=German, es=Spanish, it=Italian, pt=Portuguese, ko=Korean, zh=Chinese)",
   "set_name": "full set name if visible",
   "number": "card number if visible", 
   "hp": "HP value if visible",
@@ -234,20 +238,25 @@ TCG_SEARCH_END
 
 Detailed analysis:
 1. Card identification and confidence level
-2. Visible text and symbols
-3. Set identification clues  
-4. Condition assessment
-5. Special features or variants
-6. Estimated market value range"""
+2. Language detection and translation notes
+3. Visible text and symbols
+4. Set identification clues  
+5. Condition assessment
+6. Special features or variants
+7. Estimated market value range"""
             
         else:  # standard tier
             # Balanced prompt for good performance
             return """Identify this Pokemon card and provide search parameters.
 
+IMPORTANT: Detect if the card is in a non-English language and preserve original names.
+
 Format exactly:
 TCG_SEARCH_START
 {
   "name": "exact pokemon name",
+  "original_name": "pokemon name exactly as shown on card",
+  "language": "language code (en=English, fr=French, ja=Japanese, de=German, es=Spanish, etc)",
   "set_name": "set name if visible",
   "number": "card number if visible", 
   "hp": "HP value if visible",
@@ -257,8 +266,9 @@ TCG_SEARCH_END
 
 Analysis:
 1. Card identification
-2. Key features
-3. Condition and value"""
+2. Language detection notes
+3. Key features
+4. Condition and value"""
 
     def _get_generation_config(self, processing_tier: str, retry_unlimited: bool) -> genai.types.GenerationConfig:
         """Get tier-specific generation configuration for optimal performance."""

@@ -221,7 +221,17 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             # Clean up the extracted parameters
             cleaned_params = {}
             
-            # Clean name
+            # Extract language information
+            language_info = {}
+            if 'language' in search_params and search_params['language']:
+                language_info['detected_language'] = str(search_params['language']).strip().lower()
+            else:
+                language_info['detected_language'] = 'en'  # Default to English
+                
+            if 'original_name' in search_params and search_params['original_name']:
+                language_info['original_name'] = str(search_params['original_name']).strip()
+            
+            # Clean name (this may be translated)
             if 'name' in search_params and search_params['name']:
                 name = str(search_params['name']).strip()
                 # Remove common artifacts
@@ -230,6 +240,17 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                 name = name.strip()
                 if name and len(name) > 1:
                     cleaned_params['name'] = name
+                    
+                    # Check if translation occurred
+                    original_name = language_info.get('original_name', '')
+                    if original_name and original_name.lower() != name.lower():
+                        language_info['translated_name'] = name
+                        language_info['is_translation'] = True
+                        language_info['translation_note'] = f"Translated '{original_name}' to '{name}' for database search"
+                    else:
+                        language_info['is_translation'] = False
+                        
+            cleaned_params['language_info'] = language_info
             
             # Clean set_name
             if 'set_name' in search_params and search_params['set_name']:
@@ -381,10 +402,17 @@ async def scan_pokemon_card(request: ScanRequest):
         
         parsed_data = parse_gemini_response(gemini_data["response"])
         
+        # Create language info object
+        language_info = None
+        if parsed_data.get("language_info"):
+            from ..models.schemas import LanguageInfo
+            language_info = LanguageInfo(**parsed_data["language_info"])
+
         # Create Gemini analysis object
         gemini_analysis = GeminiAnalysis(
             raw_response=gemini_data["response"],
             structured_data=parsed_data,
+            language_info=language_info,
             confidence=0.9 if parsed_data.get("name") else 0.5,
             tokens_used={
                 "prompt": gemini_data.get("prompt_tokens", 0),

@@ -23,10 +23,20 @@ class ScanRequest(BaseModel):
     options: ScanOptions = Field(default_factory=ScanOptions)
 
 
+class LanguageInfo(BaseModel):
+    """Language detection and translation information."""
+    detected_language: str = Field(..., description="Detected language code (en, fr, ja, etc.)")
+    original_name: Optional[str] = Field(None, description="Pokemon name as written on card")
+    translated_name: Optional[str] = Field(None, description="English translation of Pokemon name")
+    is_translation: bool = Field(default=False, description="Whether name was translated")
+    translation_note: Optional[str] = Field(None, description="Note about translation performed")
+
+
 class GeminiAnalysis(BaseModel):
     """Gemini's analysis of the Pokemon card."""
     raw_response: str = Field(..., description="Full Gemini response")
     structured_data: Optional[Dict[str, Any]] = Field(None, description="Extracted structured data")
+    language_info: Optional[LanguageInfo] = Field(None, description="Language detection and translation info")
     confidence: Optional[float] = Field(None, description="Confidence score (0-1)")
     tokens_used: Optional[Dict[str, int]] = Field(None, description="Token usage")
 

@@ -636,6 +636,62 @@ function displayIdentification(identification) {
     const geminiResult = document.getElementById('geminiResult');
     geminiResult.innerHTML = ''; // Clear previous content
     
+    // Language detection info (new!)
+    if (identification.language_info) {
+        const langInfo = identification.language_info;
+        const languageNames = {
+            'en': 'English',
+            'fr': 'French',
+            'ja': 'Japanese',
+            'de': 'German',
+            'es': 'Spanish',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ko': 'Korean',
+            'zh': 'Chinese'
+        };
+        
+        const languageName = languageNames[langInfo.detected_language] || langInfo.detected_language.toUpperCase();
+        const isNonEnglish = langInfo.detected_language !== 'en';
+        
+        const languageDiv = document.createElement('div');
+        languageDiv.className = 'language-info';
+        languageDiv.innerHTML = `
+            <div class="language-detection" style="background: ${isNonEnglish ? '#fef3c7' : 'var(--bg-secondary)'}; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${isNonEnglish ? '#f59e0b' : '#10b981'};">
+                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary-color);">🌍 Language Detection</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                    <div>
+                        <div style="font-weight: bold; color: ${isNonEnglish ? '#d97706' : '#059669'};">${languageName}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Detected Language</div>
+                    </div>
+                    ${langInfo.original_name ? `
+                    <div>
+                        <div style="font-weight: bold;">${langInfo.original_name}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Original Name</div>
+                    </div>
+                    ` : ''}
+                    ${langInfo.is_translation ? `
+                    <div>
+                        <div style="font-weight: bold; color: #3b82f6;">${langInfo.translated_name}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">English Translation</div>
+                    </div>
+                    ` : ''}
+                </div>
+                ${langInfo.is_translation ? `
+                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px; font-size: 0.9rem;">
+                    <strong>📝 Note:</strong> ${langInfo.translation_note || 'Card name was translated for database search'}
+                </div>
+                ` : ''}
+                ${isNonEnglish && !langInfo.is_translation ? `
+                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 0.9rem;">
+                    <strong>⚠️ Notice:</strong> Non-English card detected - showing English equivalent pricing data
+                </div>
+                ` : ''}
+            </div>
+        `;
+        geminiResult.appendChild(languageDiv);
+    }
+
     // Token usage details
     if (identification.tokens_used) {
         const tokens = identification.tokens_used;
