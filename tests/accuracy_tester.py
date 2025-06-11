@@ -5,6 +5,9 @@ Comprehensive accuracy testing tool for Pokemon card scanner.
 This tool processes all test images through the scanner API and generates
 detailed accuracy reports with statistics and visualizations.
 
+Note: Uses Gemini 2.0 Flash (8 RPM limit), so full test of 317 images takes ~42 minutes.
+Use --sample-only for quick validation.
+
 Usage:
     uv run tests/accuracy_tester.py [options]
     
@@ -12,7 +15,7 @@ Options:
     --images-dir PATH        Directory containing test images (default: ../test-images-kortly)
     --output-dir PATH        Directory for reports and results (default: test_results)
     --api-url URL           API base URL (default: http://localhost:8000)
-    --max-concurrent N      Maximum concurrent requests (default: 3)
+    --max-concurrent N      Maximum concurrent requests (default: 1)
     --resume                Resume from previous run using saved state
     --save-raw              Save raw API responses to JSON file
     --sample-only N         Test only first N images for quick validation
@@ -54,7 +57,7 @@ class AccuracyTester:
         api_url: str = "http://localhost:8000",
         max_concurrent: int = 1,  # Reduced default to respect Gemini rate limits
         save_raw: bool = False,
-        request_delay: float = 4.5  # Delay between requests in seconds
+        request_delay: float = 8.0  # Delay between requests for 8 RPM (gemini-2.0-flash-exp limit)
     ):
         self.images_dir = Path(images_dir)
         self.output_dir = Path(output_dir)
@@ -123,6 +126,12 @@ class AccuracyTester:
         self.total_images = len(image_files)
         remaining_files = [f for f in image_files if f.name not in self.processed_files]
         
+        # Calculate estimated completion time
+        estimated_minutes = (len(remaining_files) * self.request_delay) / 60
+        eta_hours = int(estimated_minutes // 60)
+        eta_mins = int(estimated_minutes % 60)
+        eta_display = f"{eta_hours}h {eta_mins}m" if eta_hours > 0 else f"{eta_mins}m"
+        
         console.print(Panel(
             f"🃏 Pokemon Card Scanner Accuracy Test\n\n"
             f"📁 Images Directory: {self.images_dir}\n"
@@ -130,7 +139,8 @@ class AccuracyTester:
             f"🖼️  Total Images: {self.total_images}\n"
             f"⏭️  Remaining: {len(remaining_files)}\n"
             f"🔄 Concurrency: {self.max_concurrent}\n"
-            f"⏱️  Request Delay: {self.request_delay}s\n"
+            f"⏱️  Request Delay: {self.request_delay}s (Gemini 2.0 rate limit: 8 RPM)\n"
+            f"🕐 Estimated Time: {eta_display}\n"
             f"💾 Save Raw Results: {'Yes' if self.save_raw else 'No'}",
             title="Test Configuration",
             border_style="blue"
@@ -139,6 +149,10 @@ class AccuracyTester:
         if not remaining_files:
             console.print("[green]✅ All images already processed! Generating report...[/green]")
         else:
+            # Show warning for long tests
+            if len(remaining_files) > 50:
+                console.print(f"[yellow]⚠️  Large test will take {eta_display}. Consider using --sample-only for quick validation.[/yellow]")
+            
             # Process remaining images
             await self._process_images(remaining_files)
         
@@ -375,7 +389,7 @@ async def main():
         "--max-concurrent", 
         type=int, 
         default=1,
-        help="Maximum concurrent requests (default: 1 for Gemini rate limits)"
+        help="Maximum concurrent requests (default: 1 for Gemini 2.0 rate limits)"
     )
     parser.add_argument(
         "--resume", 
@@ -407,7 +421,7 @@ async def main():
         api_url=args.api_url,
         max_concurrent=args.max_concurrent,
         save_raw=args.save_raw,
-        request_delay=4.5  # Fixed delay for Gemini rate limits
+        request_delay=8.0  # Fixed delay for Gemini 2.0 rate limits (8 RPM)
     )
     
     try:
