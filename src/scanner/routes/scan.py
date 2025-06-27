@@ -24,6 +24,7 @@ from ..models.schemas import (
     QualityFeedback,
     ScanRequest,
     ScanResponse,
+    SimplifiedScanResponse,
 )
 from ..services.gemini_service import GeminiService
 from ..services.image_processor import ImageProcessor
@@ -193,6 +194,80 @@ def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str
         logger.info(f"✅ Selected best match: {best_match.get('name')} #{best_match.get('number')} (Score: {best_score})")
     
     return best_match
+
+
+def create_simplified_response(
+    best_match: Optional[PokemonCard],
+    processing_info: ProcessingInfo,
+    gemini_analysis: Optional[GeminiAnalysis] = None
+) -> SimplifiedScanResponse:
+    """Create a simplified response from the scan results."""
+    
+    # If we have a best match from TCG, use that data
+    if best_match:
+        # Extract market prices - flatten the structure
+        market_prices = None
+        if best_match.market_prices:
+            market_prices = {}
+            # Handle different price structures
+            if isinstance(best_match.market_prices, dict):
+                # Check for card type variants (normal, holofoil, reverseHolofoil, etc.)
+                price_data = None
+                
+                # Priority order for price variants
+                for variant in ['normal', 'holofoil', 'reverseHolofoil', '1stEditionNormal', '1stEditionHolofoil']:
+                    if variant in best_match.market_prices:
+                        price_data = best_match.market_prices[variant]
+                        break
+                
+                # If no variant found, check for direct price structure
+                if not price_data and 'low' in best_match.market_prices:
+                    price_data = best_match.market_prices
+                
+                # Extract prices from the data
+                if price_data and isinstance(price_data, dict):
+                    market_prices['low'] = price_data.get('low', 0)
+                    market_prices['mid'] = price_data.get('mid', 0)
+                    market_prices['high'] = price_data.get('high', 0)
+                    market_prices['market'] = price_data.get('market', price_data.get('mid', 0))
+        
+        # Get image URL
+        image_url = None
+        if best_match.images:
+            image_url = best_match.images.get('large') or best_match.images.get('small')
+        
+        return SimplifiedScanResponse(
+            name=best_match.name,
+            set_name=best_match.set_name,
+            number=best_match.number,
+            hp=best_match.hp,
+            types=best_match.types,
+            rarity=best_match.rarity,
+            image=image_url,
+            market_prices=market_prices,
+            quality_score=processing_info.quality_score
+        )
+    
+    # Fallback to Gemini data if no TCG match
+    elif gemini_analysis and gemini_analysis.structured_data:
+        data = gemini_analysis.structured_data
+        return SimplifiedScanResponse(
+            name=data.get('name', 'Unknown'),
+            set_name=data.get('set_name'),
+            number=data.get('number'),
+            hp=data.get('hp'),
+            types=data.get('types'),
+            rarity=data.get('rarity'),
+            image=None,  # No image from Gemini
+            market_prices=None,  # No prices without TCG match
+            quality_score=processing_info.quality_score
+        )
+    
+    # No data available - this shouldn't happen in normal flow
+    raise HTTPException(
+        status_code=500,
+        detail="No card data available to create response"
+    )
 
 
 def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
@@ -384,7 +459,7 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
     return search_params
 
 
-@router.post("/scan", response_model=ScanResponse, responses={500: {"model": ErrorResponse}})
+@router.post("/scan", responses={500: {"model": ErrorResponse}})
 async def scan_pokemon_card(request: ScanRequest):
     """
     Scan a Pokemon card image and identify it using intelligent processing pipeline.
@@ -434,13 +509,31 @@ async def scan_pokemon_card(request: ScanRequest):
         )
         
         if not pipeline_result['success']:
+            # Extract quality feedback from pipeline error result
+            quality_feedback = None
+            if 'processing' in pipeline_result and 'quality_feedback' in pipeline_result['processing']:
+                quality_feedback = pipeline_result['processing']['quality_feedback']
+            
+            # Return user-friendly error with quality feedback
+            error_detail = {
+                "message": pipeline_result.get('error', 'Processing pipeline failed'),
+            }
+            
+            if quality_feedback:
+                error_detail["quality_feedback"] = quality_feedback
+            
             raise HTTPException(
-                status_code=500,
-                detail=f"Processing pipeline failed: {pipeline_result.get('error')}",
+                status_code=400 if "quality too low" in pipeline_result.get('error', '').lower() else 500,
+                detail=json.dumps(error_detail),
             )
         
         # Extract Gemini result and parse for TCG search
-        gemini_data = pipeline_result['card_data']
+        gemini_data = pipeline_result.get('card_data')
+        if not gemini_data:
+            raise HTTPException(
+                status_code=500,
+                detail="Processing pipeline did not return card data",
+            )
         
         # Check if Gemini processing was successful
         if not gemini_data.get('success', False):
@@ -697,14 +790,32 @@ async def scan_pokemon_card(request: ScanRequest):
                     error_message = "Pokemon card identified but no TCG database matches found"
                     
             elif card_type == "pokemon_back":
-                # Pokemon back cards are true negatives - mark as successful identification
-                scan_success = True
-                error_message = None  # This is expected behavior
+                # Card back detected - return user-friendly error
+                raise HTTPException(
+                    status_code=400,
+                    detail=json.dumps({
+                        "message": "Card back detected. Please photograph the front of the card.",
+                        "quality_feedback": {
+                            "overall": processing_info.quality_feedback.overall,
+                            "issues": ["Card back detected"],
+                            "suggestions": ["Please photograph the front of the card to identify it"]
+                        }
+                    })
+                )
                 
             elif card_type == "non_pokemon":
-                # Non-Pokemon cards are true negatives - mark as successful identification  
-                scan_success = True
-                error_message = None  # This is expected behavior
+                # Non-Pokemon card detected - return user-friendly error
+                raise HTTPException(
+                    status_code=400,
+                    detail=json.dumps({
+                        "message": "Non-Pokemon card detected. This scanner only supports Pokemon TCG cards.",
+                        "quality_feedback": {
+                            "overall": processing_info.quality_feedback.overall,
+                            "issues": ["Non-Pokemon card detected"],
+                            "suggestions": ["Please scan a Pokemon TCG card"]
+                        }
+                    })
+                )
                 
             elif card_type == "unknown":
                 # Unknown cards - consider failed if no data extracted
@@ -747,6 +858,15 @@ async def scan_pokemon_card(request: ScanRequest):
             tcg_matches=len(tcg_matches) if tcg_matches else 0,
         ))
         
+        # Return simplified response if requested (default)
+        if request.options.response_format != "detailed":
+            return create_simplified_response(
+                best_match=best_match_card,
+                processing_info=processing_info,
+                gemini_analysis=gemini_analysis
+            )
+        
+        # Return detailed response if explicitly requested
         return response
         
     except HTTPException as e:

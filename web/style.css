@@ -905,3 +905,150 @@ footer a:hover {
         display: none;
     }
 }
+
+/* Simplified Card View */
+.main-card {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-header h2 {
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.btn-json {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-json:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.card-content {
+    padding: 1.5rem;
+}
+
+.card-image-section {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.card-image-large {
+    max-width: 300px;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.card-details {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.detail-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.detail-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.price-section h3 {
+    margin: 0 0 1rem 0;
+    color: var(--primary-color);
+}
+
+.price-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+}
+
+.price-item {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.price-item.featured {
+    background: var(--primary-color);
+    color: white;
+}
+
+.price-label {
+    display: block;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-bottom: 0.5rem;
+}
+
+.price-value {
+    display: block;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.quality-section {
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.quality-score {
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.json-view {
+    padding: 1.5rem;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+.json-view pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+/* Enhanced Error Display */
+.quality-feedback-error {
+    margin: 20px 0;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.feedback-overall {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+}
+
+.quality-excellent { color: #10b981; }
+.quality-good { color: #f59e0b; }
+.quality-fair { color: #f97316; }
+.quality-poor { color: #ef4444; }

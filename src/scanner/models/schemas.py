@@ -14,6 +14,7 @@ class ScanOptions(BaseModel):
     max_processing_time: Optional[int] = Field(None, description="Maximum processing time in ms")
     prefer_speed: Optional[bool] = Field(None, description="Prefer speed over quality")
     prefer_quality: Optional[bool] = Field(None, description="Prefer quality over speed")
+    response_format: str = Field(default="simplified", description="Response format: 'simplified' (default) or 'detailed'")
 
 
 class ScanRequest(BaseModel):
@@ -88,6 +89,19 @@ class CostInfo(BaseModel):
     gemini_cost: float = Field(..., description="Gemini API cost in USD")
     total_cost: float = Field(..., description="Total cost in USD")
     cost_breakdown: Dict[str, float] = Field(..., description="Detailed cost breakdown")
+
+
+class SimplifiedScanResponse(BaseModel):
+    """Simplified response model for card scanning."""
+    name: str = Field(..., description="Pokemon name")
+    set_name: Optional[str] = Field(None, description="Set name")
+    number: Optional[str] = Field(None, description="Card number")
+    hp: Optional[str] = Field(None, description="HP value")
+    types: Optional[List[str]] = Field(None, description="Pokemon types")
+    rarity: Optional[str] = Field(None, description="Card rarity")
+    image: Optional[str] = Field(None, description="Card image URL")
+    market_prices: Optional[Dict[str, float]] = Field(None, description="Market price data")
+    quality_score: float = Field(..., description="Image quality score (0-100)")
 
 
 class ScanResponse(BaseModel):

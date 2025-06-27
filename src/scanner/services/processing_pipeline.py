@@ -81,6 +81,15 @@ class ProcessingPipeline:
                     start_time
                 )
             
+            # Check if quality score is below acceptable threshold
+            if quality_result['quality_score'] < 40:
+                return self._create_error_result(
+                    "Image quality too low for accurate scanning",
+                    quality_result,
+                    processing_log,
+                    start_time
+                )
+            
             # Step 2: Determine Processing Tier
             tier = self._determine_tier(quality_result['quality_score'], user_preferences)
             tier_config = self.tier_configs[tier]
@@ -108,6 +117,15 @@ class ProcessingPipeline:
             gemini_time = (time.time() - gemini_start) * 1000
             
             processing_log.append(f"Gemini analysis: {gemini_time:.1f}ms")
+            
+            # Check if Gemini processing failed
+            if not gemini_result.get('success', False):
+                return self._create_error_result(
+                    f"Gemini processing failed: {gemini_result.get('error', 'Unknown error')}",
+                    quality_result,
+                    processing_log,
+                    start_time
+                )
             
             # Step 5: Compile Results
             total_time = (time.time() - start_time) * 1000

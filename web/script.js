@@ -215,10 +215,23 @@ async function scanCard() {
         const data = await response.json();
         
         if (!response.ok) {
-            throw new Error(data.detail || `API Error: ${response.status}`);
+            // Handle structured error responses
+            if (typeof data.detail === 'string') {
+                try {
+                    const errorDetail = JSON.parse(data.detail);
+                    showEnhancedError(errorDetail);
+                    return;
+                } catch {
+                    // If parsing fails, use the string as-is
+                    throw new Error(data.detail || `API Error: ${response.status}`);
+                }
+            } else {
+                throw new Error(data.detail || `API Error: ${response.status}`);
+            }
         }
         
-        if (data.success) {
+        // For simplified responses, success is implicit if we got a 200 status
+        if (data.name || data.success) {
             // Add client-side optimization info to results
             if (resizeInfo) {
                 data.clientOptimization = resizeInfo;
@@ -236,9 +249,115 @@ async function scanCard() {
 
 // Display results
 function displayResults(data) {
+    // Store the response data globally for JSON view
+    window.lastScanResult = data;
+    
     hideAllSections();
     document.getElementById('resultsSection').style.display = 'block';
     
+    // Check if we have a simplified response
+    if (data.name && !data.card_identification) {
+        // Simplified response
+        displaySimplifiedResults(data);
+    } else {
+        // Detailed response (legacy)
+        displayDetailedResults(data);
+    }
+}
+
+function displaySimplifiedResults(data) {
+    // Create a single card display
+    const resultsSection = document.getElementById('resultsSection');
+    
+    // Build the simplified card view
+    let html = `
+        <div class="result-card main-card">
+            <div class="card-header">
+                <h2>${data.name || 'Unknown Card'}</h2>
+                <button class="btn-json" onclick="toggleJsonView()">View JSON</button>
+            </div>
+            <div class="card-content" id="cardContent">
+    `;
+    
+    // Card image
+    if (data.image) {
+        html += `
+            <div class="card-image-section">
+                <img src="${data.image}" alt="${data.name}" class="card-image-large">
+            </div>
+        `;
+    }
+    
+    // Card details
+    html += '<div class="card-details">';
+    
+    // Basic info section
+    html += '<div class="detail-section">';
+    if (data.set_name) html += `<div class="detail-item"><strong>Set:</strong> ${data.set_name}</div>`;
+    if (data.number) html += `<div class="detail-item"><strong>Number:</strong> ${data.number}</div>`;
+    if (data.hp) html += `<div class="detail-item"><strong>HP:</strong> ${data.hp}</div>`;
+    if (data.types && data.types.length > 0) html += `<div class="detail-item"><strong>Types:</strong> ${data.types.join(', ')}</div>`;
+    if (data.rarity) html += `<div class="detail-item"><strong>Rarity:</strong> ${data.rarity}</div>`;
+    html += '</div>';
+    
+    // Market prices
+    if (data.market_prices) {
+        html += '<div class="price-section">';
+        html += '<h3>Market Prices</h3>';
+        html += '<div class="price-grid">';
+        if (data.market_prices.low !== undefined) html += `<div class="price-item"><span class="price-label">Low</span><span class="price-value">$${data.market_prices.low.toFixed(2)}</span></div>`;
+        if (data.market_prices.mid !== undefined) html += `<div class="price-item"><span class="price-label">Mid</span><span class="price-value">$${data.market_prices.mid.toFixed(2)}</span></div>`;
+        if (data.market_prices.high !== undefined) html += `<div class="price-item"><span class="price-label">High</span><span class="price-value">$${data.market_prices.high.toFixed(2)}</span></div>`;
+        if (data.market_prices.market !== undefined) html += `<div class="price-item featured"><span class="price-label">Market</span><span class="price-value">$${data.market_prices.market.toFixed(2)}</span></div>`;
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    // Quality score
+    html += `
+        <div class="quality-section">
+            <div class="quality-score" style="color: ${getQualityColor(data.quality_score)}">
+                Quality Score: ${data.quality_score.toFixed(1)}
+            </div>
+        </div>
+    `;
+    
+    html += '</div>'; // card-details
+    html += '</div>'; // card-content
+    
+    // JSON view (hidden by default)
+    html += `
+            <div class="json-view" id="jsonView" style="display: none;">
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            </div>
+        </div>
+        <div class="actions-section">
+            <button class="btn-primary" onclick="resetUpload()">
+                Scan Another Card
+            </button>
+        </div>
+    `;
+    
+    resultsSection.innerHTML = html;
+}
+
+function toggleJsonView() {
+    const jsonView = document.getElementById('jsonView');
+    const cardContent = document.getElementById('cardContent');
+    const button = document.querySelector('.btn-json');
+    
+    if (jsonView.style.display === 'none') {
+        jsonView.style.display = 'block';
+        cardContent.style.display = 'none';
+        button.textContent = 'View Card';
+    } else {
+        jsonView.style.display = 'none';
+        cardContent.style.display = 'block';
+        button.textContent = 'View JSON';
+    }
+}
+
+function displayDetailedResults(data) {
     // Display summary
     displaySummary(data);
     
@@ -959,6 +1078,64 @@ function showError(message) {
     hideAllSections();
     document.getElementById('errorMessage').textContent = message;
     document.getElementById('errorSection').style.display = 'block';
+}
+
+function showEnhancedError(errorDetail) {
+    hideAllSections();
+    const errorSection = document.getElementById('errorSection');
+    errorSection.style.display = 'block';
+    
+    // Build enhanced error display
+    let html = `
+        <div class="error-card">
+            <h3>❌ ${errorDetail.message || 'Error'}</h3>
+    `;
+    
+    // Show quality feedback if available
+    if (errorDetail.quality_feedback) {
+        const feedback = errorDetail.quality_feedback;
+        
+        html += `
+            <div class="quality-feedback-error">
+                <div class="feedback-overall">
+                    <strong>Quality Assessment:</strong> 
+                    <span class="quality-${feedback.overall}">${feedback.overall.toUpperCase()}</span>
+                </div>
+        `;
+        
+        if (feedback.issues && feedback.issues.length > 0) {
+            html += `
+                <div class="feedback-section">
+                    <h4>Issues Detected:</h4>
+                    <ul class="feedback-list issues">
+                        ${feedback.issues.map(issue => `<li>${issue}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        if (feedback.suggestions && feedback.suggestions.length > 0) {
+            html += `
+                <div class="feedback-section">
+                    <h4>Improvement Suggestions:</h4>
+                    <ul class="feedback-list suggestions">
+                        ${feedback.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+    }
+    
+    html += `
+            <button class="btn-secondary" onclick="resetUpload()">
+                Try Again
+            </button>
+        </div>
+    `;
+    
+    errorSection.innerHTML = html;
 }
 
 function resetUpload() {
