@@ -47,4 +47,9 @@ processed_images/
 # MyPy
 .mypy_cache/
 .dmypy.json
-dmypy.json
+dmypy.json# Test results and reports
+simple_report_*.html
+test_results/*.html
+test_results/test_state.json
+test_results/raw_results.json
+*.HEIC
