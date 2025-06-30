@@ -2,6 +2,7 @@
 
 import io
 import logging
+import os
 from typing import Any, Dict, Optional
 
 import google.generativeai as genai
@@ -20,15 +21,29 @@ class GeminiService:
     def __init__(self, api_key: Optional[str] = None):
         """Initialize Gemini service with API key."""
         self._model = None
-        self._api_key = api_key
+        # Clean the API key to remove any potential issues
+        if api_key:
+            # Remove any whitespace, newlines, or hidden characters
+            self._api_key = api_key.strip()
+        else:
+            self._api_key = api_key
 
     @property
     def model(self):
         """Lazy load the Gemini model."""
         if self._model is None:
             if self._api_key:
-                genai.configure(api_key=self._api_key)
-                logger.info("Configured Gemini with API key")
+                try:
+                    # Set API key in environment as a workaround for metadata issues
+                    os.environ["GOOGLE_API_KEY"] = self._api_key
+                    # Configure with cleaned API key
+                    genai.configure(api_key=self._api_key)
+                    logger.info(f"Configured Gemini with API key (length: {len(self._api_key)})")
+                except Exception as e:
+                    logger.error(f"Failed to configure Gemini API: {e}")
+                    # Try to log more details without exposing the key
+                    logger.error(f"API key format check - starts with: {self._api_key[:8]}..., ends with: ...{self._api_key[-4:]}")
+                    raise
             else:
                 logger.warning(
                     "No Gemini API key provided. Set GOOGLE_API_KEY environment variable."

@@ -13,8 +13,9 @@ class Config:
     
     def __init__(self):
         # Core API Configuration
-        self.google_api_key = os.getenv("GOOGLE_API_KEY", "")
-        self.pokemon_tcg_api_key = os.getenv("POKEMON_TCG_API_KEY", "")
+        # Clean API keys to remove any whitespace or hidden characters that might cause issues
+        self.google_api_key = os.getenv("GOOGLE_API_KEY", "").strip()
+        self.pokemon_tcg_api_key = os.getenv("POKEMON_TCG_API_KEY", "").strip()
         
         # Server Configuration
         self.host = os.getenv("HOST", "0.0.0.0")
