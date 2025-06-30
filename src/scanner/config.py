@@ -23,7 +23,7 @@ class Config:
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
         
         # Gemini AI Configuration
-        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash-exp")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
         self.gemini_max_tokens = int(os.getenv("GEMINI_MAX_TOKENS", "2000"))
         self.gemini_temperature = float(os.getenv("GEMINI_TEMPERATURE", "0.1"))
         self.gemini_max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
