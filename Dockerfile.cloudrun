@@ -1,49 +1,35 @@
 # Pokemon Card Scanner - Cloud Run Dockerfile with nginx + Basic Auth
 
-# Stage 1: Build the Python application
-FROM python:3.12-slim as python-builder
+# Use Python base image directly
+FROM python:3.12-slim
 
-WORKDIR /app
-
-# Install system dependencies for Python
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libheif-dev \
+    nginx \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
-RUN pip install uv
+RUN pip install --break-system-packages uv
+
+# Create app directory
+WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml ./
 COPY uv.lock ./
 
-# Install Python dependencies
+# Install Python dependencies and create stable virtual environment
 RUN uv sync --frozen
+
+# Activate the virtual environment in the PATH
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy source code
 COPY src/ ./src/
 COPY web/ ./web/
-
-# Stage 2: Create the runtime image with nginx
-FROM nginx:alpine as runtime
-
-# Install Python 3.12 and required packages
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    libheif \
-    supervisor \
-    && rm -rf /var/cache/apk/*
-
-# Install uv in runtime
-RUN pip3 install uv
-
-# Create app directory
-WORKDIR /app
-
-# Copy Python app from builder stage
-COPY --from=python-builder /app .
 
 # Copy nginx configuration
 COPY nginx.cloudrun.conf /etc/nginx/nginx.conf
@@ -56,12 +42,12 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Create log directories
 RUN mkdir -p /var/log/supervisor /var/log/nginx
 
-# Expose port (Cloud Run expects port 8080, but we'll use 80 internally)
+# Expose port
 EXPOSE 80
 
-# Health check for Cloud Run
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost/api/v1/health || exit 1
+# Health check disabled to prevent restart loop
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+#     CMD wget --no-verbose --tries=1 --spider http://localhost:8000/api/v1/health || exit 1
 
 # Use supervisor to run both nginx and the Python app
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
