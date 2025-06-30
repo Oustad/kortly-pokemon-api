@@ -100,9 +100,8 @@ function showImagePreview(file) {
         
         document.getElementById('fileName').textContent = file.name;
         
-        // Show preview section and options
+        // Show preview section
         document.getElementById('previewSection').style.display = 'block';
-        document.getElementById('optionsPanel').style.display = 'block';
         
         // Hide upload area
         document.getElementById('uploadArea').style.display = 'none';
@@ -140,9 +139,8 @@ function showHeicPreview(file) {
     
     document.getElementById('fileName').textContent = file.name;
     
-    // Show preview section and options
+    // Show preview section
     document.getElementById('previewSection').style.display = 'block';
-    document.getElementById('optionsPanel').style.display = 'block';
     
     // Hide upload area
     document.getElementById('uploadArea').style.display = 'none';
@@ -187,21 +185,16 @@ async function scanCard() {
             image: base64.split(',')[1], // Remove data URL prefix
             filename: selectedFile.name,
             options: {
-                optimize_for_speed: document.getElementById('optimizeSpeed').checked,
-                include_cost_tracking: document.getElementById('trackCost').checked,
+                optimize_for_speed: false,  // Use standard tier instead
+                include_cost_tracking: true,  // Default to tracking costs
                 retry_on_truncation: true,
-                prefer_speed: document.getElementById('optimizeSpeed').checked,
-                max_processing_time: document.getElementById('optimizeSpeed').checked ? 1500 : null
+                prefer_speed: false,
+                max_processing_time: null  // No time limit for better results
             }
         };
         
-        // Update loading status with processing tier info
-        const optimizeSpeed = document.getElementById('optimizeSpeed').checked;
-        if (optimizeSpeed) {
-            updateLoadingStatus('Fast processing mode - analyzing card...');
-        } else {
-            updateLoadingStatus('High quality mode - analyzing card thoroughly...');
-        }
+        // Update loading status
+        updateLoadingStatus('Analyzing card...');
         
         // Call API
         const response = await fetch('/api/v1/scan', {
@@ -1081,6 +1074,9 @@ function showError(message) {
 }
 
 function showEnhancedError(errorDetail) {
+    // Store error data globally for JSON view
+    window.lastErrorResult = errorDetail;
+    
     hideAllSections();
     const errorSection = document.getElementById('errorSection');
     errorSection.style.display = 'block';
@@ -1088,7 +1084,11 @@ function showEnhancedError(errorDetail) {
     // Build enhanced error display
     let html = `
         <div class="error-card">
-            <h3>❌ ${errorDetail.message || 'Error'}</h3>
+            <div class="card-header">
+                <h3>❌ ${errorDetail.message || 'Error'}</h3>
+                <button class="btn-json" onclick="toggleErrorJsonView()">View JSON</button>
+            </div>
+            <div class="error-content" id="errorContent">
     `;
     
     // Show quality feedback if available
@@ -1129,6 +1129,10 @@ function showEnhancedError(errorDetail) {
     }
     
     html += `
+            </div>
+            <div class="json-view" id="errorJsonView" style="display: none;">
+                <pre>${JSON.stringify(errorDetail, null, 2)}</pre>
+            </div>
             <button class="btn-secondary" onclick="resetUpload()">
                 Try Again
             </button>
@@ -1138,12 +1142,27 @@ function showEnhancedError(errorDetail) {
     errorSection.innerHTML = html;
 }
 
+function toggleErrorJsonView() {
+    const jsonView = document.getElementById('errorJsonView');
+    const errorContent = document.getElementById('errorContent');
+    const button = document.querySelector('#errorSection .btn-json');
+    
+    if (jsonView.style.display === 'none') {
+        jsonView.style.display = 'block';
+        errorContent.style.display = 'none';
+        button.textContent = 'View Error';
+    } else {
+        jsonView.style.display = 'none';
+        errorContent.style.display = 'block';
+        button.textContent = 'View JSON';
+    }
+}
+
 function resetUpload() {
     selectedFile = null;
     document.getElementById('imageInput').value = '';
     document.getElementById('uploadArea').style.display = 'block';
     document.getElementById('previewSection').style.display = 'none';
-    document.getElementById('optionsPanel').style.display = 'none';
     hideAllSections();
 }
 

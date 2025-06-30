@@ -263,11 +263,28 @@ def create_simplified_response(
             quality_score=processing_info.quality_score
         )
     
-    # No data available - this shouldn't happen in normal flow
-    raise HTTPException(
-        status_code=500,
-        detail="No card data available to create response"
-    )
+    # Fallback response for cases where we have minimal data
+    else:
+        # Extract any available data from Gemini analysis
+        name = "Unknown Card"
+        if gemini_analysis and hasattr(gemini_analysis, 'raw_response'):
+            # Try to extract at least a name from the raw response
+            import re
+            name_match = re.search(r'"name":\s*"([^"]+)"', gemini_analysis.raw_response)
+            if name_match:
+                name = name_match.group(1)
+        
+        return SimplifiedScanResponse(
+            name=name,
+            set_name=None,
+            number=None,
+            hp=None,
+            types=None,
+            rarity=None,
+            image=None,
+            market_prices=None,
+            quality_score=processing_info.quality_score
+        )
 
 
 def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:

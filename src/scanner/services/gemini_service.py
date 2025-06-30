@@ -210,11 +210,11 @@ class GeminiService:
         
         if processing_tier == "fast":
             # Ultra-minimal prompt for speed
-            return """Pokemon card identification. Output format:
+            return """Pokemon card identification. Detect card type first.
 TCG_SEARCH_START
-{"name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
+{"card_type": "pokemon_front/pokemon_back/non_pokemon/unknown", "name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
 TCG_SEARCH_END
-Brief: Name, set, condition."""
+Brief: Card type, name, set."""
             
         elif processing_tier == "enhanced":
             # Comprehensive prompt for challenging images
@@ -257,16 +257,25 @@ Detailed analysis:
             
         else:  # standard tier
             # Balanced prompt for good performance
-            return """Identify this Pokemon card and provide search parameters.
+            return """Identify this card. First determine the card type.
 
-IMPORTANT: Detect if the card is in a non-English language and preserve original names.
+CARD TYPE:
+- pokemon_front: Pokemon card showing the front
+- pokemon_back: Pokemon card showing the back
+- non_pokemon: Not a Pokemon card
+- unknown: Cannot determine
+
+IMPORTANT: Detect language and preserve original names.
 
 Format exactly:
 TCG_SEARCH_START
 {
+  "card_type": "pokemon_front/pokemon_back/non_pokemon/unknown",
+  "is_pokemon_card": true/false,
+  "card_side": "front/back/unknown",
   "name": "exact pokemon name",
   "original_name": "pokemon name exactly as shown on card",
-  "language": "language code (en=English, fr=French, ja=Japanese, de=German, es=Spanish, etc)",
+  "language": "language code (en/fr/ja/de/es/etc)",
   "set_name": "set name if visible",
   "number": "card number if visible", 
   "hp": "HP value if visible",
@@ -275,10 +284,9 @@ TCG_SEARCH_START
 TCG_SEARCH_END
 
 Analysis:
-1. Card identification
+1. Card type and identification
 2. Language detection notes
-3. Key features
-4. Condition and value"""
+3. Key features"""
 
     def _get_generation_config(self, processing_tier: str, retry_unlimited: bool) -> genai.types.GenerationConfig:
         """Get tier-specific generation configuration for optimal performance."""
