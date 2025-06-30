@@ -1,0 +1,67 @@
+# Pokemon Card Scanner - Cloud Run Dockerfile with nginx + Basic Auth
+
+# Stage 1: Build the Python application
+FROM python:3.12-slim as python-builder
+
+WORKDIR /app
+
+# Install system dependencies for Python
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libheif-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install uv
+
+# Copy project files
+COPY pyproject.toml ./
+COPY uv.lock ./
+
+# Install Python dependencies
+RUN uv sync --frozen
+
+# Copy source code
+COPY src/ ./src/
+COPY web/ ./web/
+
+# Stage 2: Create the runtime image with nginx
+FROM nginx:alpine as runtime
+
+# Install Python 3.12 and required packages
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    libheif \
+    supervisor \
+    && rm -rf /var/cache/apk/*
+
+# Install uv in runtime
+RUN pip3 install uv
+
+# Create app directory
+WORKDIR /app
+
+# Copy Python app from builder stage
+COPY --from=python-builder /app .
+
+# Copy nginx configuration
+COPY nginx.cloudrun.conf /etc/nginx/nginx.conf
+COPY .htpasswd /etc/nginx/.htpasswd
+COPY 401.html /usr/share/nginx/html/401.html
+
+# Copy supervisor configuration
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create log directories
+RUN mkdir -p /var/log/supervisor /var/log/nginx
+
+# Expose port (Cloud Run expects port 8080, but we'll use 80 internally)
+EXPOSE 80
+
+# Health check for Cloud Run
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost/api/v1/health || exit 1
+
+# Use supervisor to run both nginx and the Python app
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
