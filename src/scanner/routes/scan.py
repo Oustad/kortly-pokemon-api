@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 config = get_config()
 
 router = APIRouter(prefix="/api/v1", tags=["scanner"])
+web_router = APIRouter(tags=["web"])
 
 # Constants
 MINIMUM_SCORE_THRESHOLD = 750  # Cards below this score are likely wrong matches
@@ -1060,8 +1061,10 @@ async def scan_pokemon_card(request: ScanRequest):
                 quality_feedback = pipeline_result['processing']['quality_feedback']
             
             # Return user-friendly error with quality feedback
+            error_message = pipeline_result.get('error', 'Processing pipeline failed')
             error_detail = {
-                "message": pipeline_result.get('error', 'Processing pipeline failed'),
+                "message": error_message,
+                "error_type": "image_quality" if "quality too low" in error_message.lower() else "processing_failed",
             }
             
             if quality_feedback:
@@ -1361,9 +1364,25 @@ async def scan_pokemon_card(request: ScanRequest):
                 if highest_card:
                     logger.info(f"   📊 Best candidate: {highest_card.get('card_name')} #{highest_card.get('card_number')} from {highest_card.get('set_name')}")
                 
+                error_detail = {
+                    "message": "Card not found: No matching Pokemon cards found in database",
+                    "error_type": "card_not_found",
+                    "details": {
+                        "highest_score": highest_score,
+                        "required_score": MINIMUM_SCORE_THRESHOLD,
+                        "score_gap": MINIMUM_SCORE_THRESHOLD - highest_score
+                    },
+                    "suggestions": [
+                        "Try a clearer image with better lighting",
+                        "Ensure the card is fully visible and centered",
+                        "Make sure the image is not blurry or distorted",
+                        "Check that it's a Pokemon trading card (not a different card game)"
+                    ]
+                }
+                
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Card not found: No matching Pokemon cards found in database. Highest match score was {highest_score} (needed {MINIMUM_SCORE_THRESHOLD}). Try a clearer image with better lighting or ensure the card is fully visible and centered."
+                    detail=json.dumps(error_detail)
                 )
             
             best_match_card = None
@@ -1765,4 +1784,77 @@ async def get_processed_image(filename: str):
         raise
     except Exception as e:
         logger.error(f"Error serving image {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@web_router.get("/advanced")
+async def serve_advanced_interface():
+    """
+    Serve the advanced web interface.
+    
+    Returns:
+        The advanced HTML interface
+    """
+    try:
+        # Get the web directory path (same as in main.py)
+        web_dir = Path(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web"))
+        advanced_html_path = web_dir / "index_advanced.html"
+        
+        if not advanced_html_path.exists():
+            raise HTTPException(status_code=404, detail="Advanced interface not found")
+        
+        return FileResponse(
+            path=str(advanced_html_path),
+            media_type="text/html",
+            headers={"Cache-Control": "no-cache"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving advanced interface: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@web_router.get("/advanced/{file_path:path}")
+async def serve_advanced_assets(file_path: str):
+    """
+    Serve advanced interface static assets (JS, CSS).
+    
+    Args:
+        file_path: Path to the static asset
+        
+    Returns:
+        The requested static file
+    """
+    try:
+        # Get the web directory path (same as in main.py)
+        web_dir = Path(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web"))
+        
+        # Map requests to advanced versions
+        if file_path == "script.js":
+            file_path = "script_advanced.js"
+        elif file_path == "style.css":
+            file_path = "style_advanced.css"
+        
+        full_path = web_dir / file_path
+        
+        if not full_path.exists() or not full_path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Determine media type
+        media_type = "text/javascript" if file_path.endswith('.js') else \
+                     "text/css" if file_path.endswith('.css') else \
+                     "text/plain"
+        
+        return FileResponse(
+            path=str(full_path),
+            media_type=media_type,
+            headers={"Cache-Control": "no-cache"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving advanced asset {file_path}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

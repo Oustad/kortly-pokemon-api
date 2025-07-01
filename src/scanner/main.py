@@ -109,12 +109,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router)
 app.include_router(scan.router)
+app.include_router(scan.web_router)  # Include web routes without prefix
 app.include_router(metrics.router)
 
 # Mount static files for web interface (if enabled)
 if config.serve_static_files:
     web_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web")
     if os.path.exists(web_dir):
+        # Mount static files AFTER all API routes to avoid conflicts
         app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
         logger.info(f"📁 Serving web interface from {web_dir}")
     else:
