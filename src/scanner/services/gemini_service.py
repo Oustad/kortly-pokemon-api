@@ -225,15 +225,14 @@ class GeminiService:
         
         if processing_tier == "fast":
             # Ultra-minimal prompt for speed
-            return """Pokemon card identification. Detect card type first.
+            return """Pokemon card identification. Detect card type first, note visual features.
 TCG_SEARCH_START
-{"card_type": "pokemon_front/pokemon_back/non_pokemon/unknown", "name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"]}
-TCG_SEARCH_END
-Brief: Card type, name, set."""
+{"card_type": "pokemon_front/pokemon_back/non_pokemon/unknown", "name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"], "card_series": "e-Card/EX/XY/etc", "border_color": "color", "foil_pattern": "holo type"}
+TCG_SEARCH_END"""
             
         elif processing_tier == "enhanced":
             # Comprehensive prompt for challenging images
-            return """Analyze this image comprehensively. First determine what type of card this is.
+            return """Analyze this image comprehensively. First determine what type of card this is, then identify visual distinguishing features.
 
 CARD TYPE DETECTION:
 - pokemon_front: Pokemon card showing the front (Pokemon, attacks, abilities)
@@ -241,7 +240,46 @@ CARD TYPE DETECTION:
 - non_pokemon: Not a Pokemon card (Magic, Yu-Gi-Oh, sports card, etc.)
 - unknown: Cannot determine card type due to image quality
 
+VISUAL ANALYSIS - CRITICAL FOR CARD DIFFERENTIATION:
+Look for these distinguishing features:
+- Set symbols/logos (e-Card logo, XY symbol, Sword & Shield logo, etc.)
+- Card series/era (e-Card, EX, Diamond & Pearl, XY, Sun & Moon, Sword & Shield, etc.)
+- XY-era specific sets: Look for "BREAKpoint", "BREAKthrough", "Fates Collide", "Steam Siege", "Evolutions", etc.
+- Card frame design (vintage yellow border, modern silver, black border, etc.)
+- Foil patterns (rainbow foil, cosmos holo, texture, crystal pattern, etc.)
+- Energy symbol style (classic flat, modern 3D, stylized)
+- Layout differences (attack cost placement, text formatting)
+
+IMPORTANT for Set Name Extraction:
+- Extract the actual set NAME, not just symbol description
+- Examples: "Plasma Freeze" (not "Plasma Freeze set symbol"), "Battle Styles" (not "Battle Styles logo")
+- HeartGold/SoulSilver era: "HS—Undaunted", "HS—Unleashed", "HS—Triumphant", "HeartGold & SoulSilver"
+- XY-era: Look for specific expansion names like "BREAKpoint", "BREAKthrough", "Fates Collide", "Steam Siege"
+- Black & White era: "Plasma Freeze", "Plasma Storm", "Plasma Blast", "Emerging Powers", "Noble Victories"
+- Check for BREAK evolution mechanics or Mega evolution symbols
+- Note any promo markings or special set indicators
+
+PRIME CARD DETECTION (HeartGold/SoulSilver era):
+- Look for "Prime" text on the card (usually near the Pokemon name)
+- Prime cards have distinctive horizontal layout and special border
+- Prime cards are from HGSS era sets: Undaunted, Unleashed, Triumphant
+- Include "Prime" in the name if detected (e.g., "Houndoom Prime")
+
 IMPORTANT: Detect the card language and preserve original names.
+
+CARD NUMBER READING (CRITICAL):
+- Read card numbers very carefully, character by character
+- Common mistakes: H11 vs H1, 011 vs 01, 104 vs 10
+- Double-check each digit, especially with stylized fonts or holo patterns
+- e-Card era: Numbers often start with H (e.g., H11/H32, H25/H32)
+- Modern cards: Usually simple numbers (e.g., 62/116, 025/198)
+
+UNCERTAINTY AND CONFIDENCE HANDLING:
+- If text is blurry or unclear, indicate uncertainty in your analysis
+- Use phrases like "appears to be", "likely", "unclear due to image quality" when uncertain
+- If you cannot clearly read set symbols or text, say so explicitly
+- Provide multiple possibilities when identification is ambiguous
+- Lower your confidence level when visual features are unclear or contradictory
 
 Required format:
 TCG_SEARCH_START
@@ -252,33 +290,33 @@ TCG_SEARCH_START
   "name": "exact pokemon name from card",
   "original_name": "pokemon name exactly as written on the card", 
   "language": "card language code (en=English, fr=French, ja=Japanese, de=German, es=Spanish, it=Italian, pt=Portuguese, ko=Korean, zh=Chinese)",
-  "set_name": "full set name if visible",
-  "number": "card number if visible", 
+  "set_name": "exact set name (extract from set symbol: 'Plasma Freeze', 'Battle Styles', etc.)",
+  "number": "card number if visible (read carefully, e.g., H11 not H1, double-check digits)", 
   "hp": "HP value if visible",
   "types": ["pokemon type(s) like Fire, Water, Grass etc"],
-  "supertype": "Pokemon"
+  "supertype": "Pokemon",
+  "set_symbol": "describe visible set symbol or logo",
+  "card_series": "e-Card/EX/Diamond Pearl/XY/Sun Moon/Sword Shield/Scarlet Violet/etc",
+  "visual_era": "vintage/classic/modern based on design style",
+  "foil_pattern": "describe foil/holo pattern if present",
+  "border_color": "yellow/silver/black/gold/other border color",
+  "energy_symbol_style": "classic/modern/3D energy symbol style"
 }
-TCG_SEARCH_END
-
-Detailed analysis:
-1. Card type determination and reasoning
-2. Card identification and confidence level
-3. Language detection and translation notes
-4. Visible text and symbols
-5. Set identification clues  
-6. Condition assessment
-7. Special features or variants
-8. Estimated market value range"""
+TCG_SEARCH_END"""
             
         else:  # standard tier
             # Balanced prompt for good performance
-            return """Identify this card. First determine the card type.
+            return """Identify this card. First determine the card type, then note visual distinguishing features.
 
 CARD TYPE:
 - pokemon_front: Pokemon card showing the front
 - pokemon_back: Pokemon card showing the back
 - non_pokemon: Not a Pokemon card
 - unknown: Cannot determine
+
+VISUAL FEATURES - Important for accurate identification:
+Look for: set symbols, card series (e-Card/EX/XY/etc), border color, foil patterns
+XY-era cards: Look for specific expansion names like "BREAKpoint", "BREAKthrough", "Fates Collide", not just "XY"
 
 IMPORTANT: Detect language and preserve original names.
 
@@ -288,20 +326,20 @@ TCG_SEARCH_START
   "card_type": "pokemon_front/pokemon_back/non_pokemon/unknown",
   "is_pokemon_card": true/false,
   "card_side": "front/back/unknown",
-  "name": "exact pokemon name",
+  "name": "exact pokemon name (include 'Prime' if detected, e.g., 'Houndoom Prime')",
   "original_name": "pokemon name exactly as shown on card",
   "language": "language code (en/fr/ja/de/es/etc)",
-  "set_name": "set name if visible",
-  "number": "card number if visible", 
+  "set_name": "exact set name (e.g., 'Plasma Freeze', not 'Plasma Freeze set symbol')",
+  "number": "card number if visible (read carefully, e.g., H11 not H1, double-check digits)", 
   "hp": "HP value if visible",
-  "types": ["pokemon type(s)"]
+  "types": ["pokemon type(s)"],
+  "set_symbol": "visible set symbol or logo",
+  "card_series": "e-Card/EX/HeartGold SoulSilver/XY/Sun Moon/Sword Shield/etc",
+  "visual_era": "vintage/classic/HGSS/modern",
+  "foil_pattern": "holo pattern description",
+  "border_color": "border color"
 }
-TCG_SEARCH_END
-
-Analysis:
-1. Card type and identification
-2. Language detection notes
-3. Key features"""
+TCG_SEARCH_END"""
 
     def _get_generation_config(self, processing_tier: str, retry_unlimited: bool) -> genai.types.GenerationConfig:
         """Get tier-specific generation configuration for optimal performance."""
@@ -321,9 +359,9 @@ Analysis:
                 top_p=0.8,        # Focused sampling
             )
         elif processing_tier == "enhanced":
-            # Maximum tokens for comprehensive analysis
+            # Maximum tokens for comprehensive analysis (reduced after removing detailed analysis)
             return genai.types.GenerationConfig(
-                max_output_tokens=min(800, config.gemini_max_tokens * 2),  # Longer detailed response
+                max_output_tokens=min(400, config.gemini_max_tokens),  # Optimized response length
                 temperature=config.gemini_temperature,
                 top_p=0.95,       # More creative sampling for challenging images
             )

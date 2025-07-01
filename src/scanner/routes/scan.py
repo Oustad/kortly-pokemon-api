@@ -40,6 +40,213 @@ config = get_config()
 
 router = APIRouter(prefix="/api/v1", tags=["scanner"])
 
+# Constants
+MINIMUM_SCORE_THRESHOLD = 750  # Cards below this score are likely wrong matches
+
+
+def _get_set_family(set_name: str) -> Optional[List[str]]:
+    """
+    Map generic set names to their specific family expansions.
+    
+    Args:
+        set_name: Generic set name extracted by AI
+        
+    Returns:
+        List of specific set names to search, or None if no family mapping
+    """
+    if not set_name:
+        return None
+        
+    set_name_lower = set_name.lower().strip()
+    logger.info(f"🔍 _get_set_family called with: '{set_name}' (normalized: '{set_name_lower}')")
+    
+    # XY-era set families
+    if set_name_lower in ["xy", "x y", "xy base"]:
+        return [
+            "XY", 
+            "XY BREAKpoint", 
+            "XY BREAKthrough", 
+            "XY Fates Collide",
+            "XY Steam Siege",
+            "XY Evolutions",
+            "XY Flashfire",
+            "XY Furious Fists", 
+            "XY Phantom Forces",
+            "XY Primal Clash",
+            "XY Roaring Skies",
+            "XY Ancient Origins"
+        ]
+    
+    # Sun & Moon era
+    elif set_name_lower in ["sun moon", "sun & moon", "sm"]:
+        return [
+            "Sun & Moon",
+            "Sun & Moon Guardians Rising", 
+            "Sun & Moon Burning Shadows",
+            "Sun & Moon Crimson Invasion",
+            "Sun & Moon Ultra Prism",
+            "Sun & Moon Forbidden Light",
+            "Sun & Moon Celestial Storm",
+            "Sun & Moon Lost Thunder",
+            "Sun & Moon Team Up",
+            "Sun & Moon Unbroken Bonds",
+            "Sun & Moon Unified Minds",
+            "Sun & Moon Cosmic Eclipse"
+        ]
+    
+    # Sword & Shield era
+    elif set_name_lower in ["sword shield", "sword & shield", "swsh"]:
+        return [
+            "Sword & Shield",
+            "Sword & Shield Rebel Clash",
+            "Sword & Shield Darkness Ablaze", 
+            "Sword & Shield Vivid Voltage",
+            "Sword & Shield Battle Styles",
+            "Sword & Shield Chilling Reign",
+            "Sword & Shield Evolving Skies",
+            "Sword & Shield Fusion Strike",
+            "Sword & Shield Brilliant Stars",
+            "Sword & Shield Astral Radiance",
+            "Sword & Shield Lost Origin",
+            "Sword & Shield Silver Tempest"
+        ]
+    
+    # HeartGold/SoulSilver era
+    elif set_name_lower in ["heartgold", "soulsilver", "hgss", "hs", "heart gold", "soul silver"]:
+        return [
+            "HeartGold & SoulSilver",
+            "HS—Unleashed", 
+            "HS—Undaunted",
+            "HS—Triumphant",
+            "Unleashed",
+            "Undaunted", 
+            "Triumphant"
+        ]
+    
+    # Specific HGSS set searches
+    elif set_name_lower in ["undaunted", "hs undaunted", "hs—undaunted"]:
+        logger.info(f"   ✅ Matched Undaunted set family")
+        return ["HS—Undaunted", "Undaunted"]
+    elif set_name_lower in ["unleashed", "hs unleashed", "hs—unleashed"]:
+        logger.info(f"   ✅ Matched Unleashed set family")
+        return ["HS—Unleashed", "Unleashed"]  
+    elif set_name_lower in ["triumphant", "hs triumphant", "hs—triumphant"]:
+        logger.info(f"   ✅ Matched Triumphant set family")
+        return ["HS—Triumphant", "Triumphant"]
+        
+    # No family mapping found
+    logger.info(f"   ❌ No set family mapping found for '{set_name}'")
+    return None
+
+
+def _extract_set_name_from_symbol(set_symbol_desc: str) -> Optional[str]:
+    """
+    Extract actual set name from set symbol descriptions.
+    
+    Args:
+        set_symbol_desc: Description of set symbol from AI (e.g., "Plasma Freeze set symbol")
+    
+    Returns:
+        Actual set name or None if not found
+    """
+    if not set_symbol_desc:
+        return None
+    
+    desc_lower = set_symbol_desc.lower().strip()
+    logger.info(f"🔍 _extract_set_name_from_symbol called with: '{set_symbol_desc}' (normalized: '{desc_lower}')")
+    
+    # Map symbol descriptions to actual set names
+    symbol_mappings = {
+        # HeartGold/SoulSilver era
+        'heartgold': 'HeartGold & SoulSilver',
+        'soulsilver': 'HeartGold & SoulSilver', 
+        'heart gold': 'HeartGold & SoulSilver',
+        'soul silver': 'HeartGold & SoulSilver',
+        'hgss': 'HeartGold & SoulSilver',
+        'unleashed': 'HS—Unleashed',
+        'undaunted': 'HS—Undaunted',
+        'triumphant': 'HS—Triumphant',
+        'hs unleashed': 'HS—Unleashed',
+        'hs undaunted': 'HS—Undaunted', 
+        'hs triumphant': 'HS—Triumphant',
+        
+        # Black & White era
+        'plasma freeze': 'Plasma Freeze',
+        'plasma storm': 'Plasma Storm', 
+        'plasma blast': 'Plasma Blast',
+        'black white': 'Black & White',
+        'black & white': 'Black & White',
+        'emerging powers': 'Emerging Powers',
+        'noble victories': 'Noble Victories',
+        'next destinies': 'Next Destinies',
+        'dark explorers': 'Dark Explorers',
+        'dragons exalted': 'Dragons Exalted',
+        'boundaries crossed': 'Boundaries Crossed',
+        'legendary treasures': 'Legendary Treasures',
+        
+        # XY era
+        'xy flashfire': 'XY Flashfire',
+        'xy furious fists': 'XY Furious Fists',
+        'xy phantom forces': 'XY Phantom Forces',
+        'xy primal clash': 'XY Primal Clash',
+        'xy roaring skies': 'XY Roaring Skies',
+        'xy ancient origins': 'XY Ancient Origins',
+        'xy breakthrough': 'XY BREAKthrough',
+        'xy breakthrough': 'XY BREAKthrough',
+        'xy breakpoint': 'XY BREAKpoint',
+        'xy fates collide': 'XY Fates Collide',
+        'xy steam siege': 'XY Steam Siege',
+        'xy evolutions': 'XY Evolutions',
+        
+        # Sun & Moon era
+        'sun moon': 'Sun & Moon',
+        'sun & moon': 'Sun & Moon',
+        'guardians rising': 'Sun & Moon Guardians Rising',
+        'burning shadows': 'Sun & Moon Burning Shadows',
+        'crimson invasion': 'Sun & Moon Crimson Invasion',
+        'ultra prism': 'Sun & Moon Ultra Prism',
+        'forbidden light': 'Sun & Moon Forbidden Light',
+        'celestial storm': 'Sun & Moon Celestial Storm',
+        'lost thunder': 'Sun & Moon Lost Thunder',
+        'team up': 'Sun & Moon Team Up',
+        'unbroken bonds': 'Sun & Moon Unbroken Bonds',
+        'unified minds': 'Sun & Moon Unified Minds',
+        'cosmic eclipse': 'Sun & Moon Cosmic Eclipse',
+        
+        # Sword & Shield era
+        'sword shield': 'Sword & Shield',
+        'sword & shield': 'Sword & Shield',
+        'rebel clash': 'Sword & Shield Rebel Clash',
+        'darkness ablaze': 'Sword & Shield Darkness Ablaze',
+        'vivid voltage': 'Sword & Shield Vivid Voltage',
+        'battle styles': 'Sword & Shield Battle Styles',
+        'chilling reign': 'Sword & Shield Chilling Reign',
+        'evolving skies': 'Sword & Shield Evolving Skies',
+        'fusion strike': 'Sword & Shield Fusion Strike',
+        'brilliant stars': 'Sword & Shield Brilliant Stars',
+        'astral radiance': 'Sword & Shield Astral Radiance',
+        'lost origin': 'Sword & Shield Lost Origin',
+        'silver tempest': 'Sword & Shield Silver Tempest',
+    }
+    
+    # Check for direct matches first
+    for keyword, set_name in symbol_mappings.items():
+        if keyword in desc_lower:
+            logger.info(f"   ✅ Found symbol mapping: '{keyword}' → '{set_name}'")
+            return set_name
+    
+    # Look for pattern like "X set symbol" or "X symbol"
+    # Remove common suffixes
+    for suffix in [' set symbol', ' symbol', ' logo', ' set logo']:
+        if desc_lower.endswith(suffix):
+            base_name = desc_lower[:-len(suffix)].strip()
+            if base_name in symbol_mappings:
+                logger.info(f"   ✅ Found suffix mapping: '{base_name}' → '{symbol_mappings[base_name]}'")
+                return symbol_mappings[base_name]
+    
+    logger.info(f"   ❌ No symbol mapping found for '{set_symbol_desc}'")
+    return None
+
 
 def save_processed_image(image_data: bytes, original_filename: str, stage: str = "processed") -> Optional[str]:
     """
@@ -139,8 +346,8 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     
     # Set name match (already handled by search, but good to verify)
     if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
-        gemini_set = gemini_params.get("set_name", "").lower().strip()
-        card_set = card_data.get("set", {}).get("name", "").lower().strip()
+        gemini_set = str(gemini_params.get("set_name") or "").lower().strip()
+        card_set = str(card_data.get("set", {}).get("name") or "").lower().strip()
         
         if gemini_set == card_set:
             score += 200
@@ -157,52 +364,118 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
 def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dict[str, Any]) -> tuple[int, Dict[str, int]]:
     """
     Calculate match score with detailed breakdown for transparency.
+    CRITICAL: Set + Number + Name combinations get MASSIVE priority over name-only matches.
     
     Returns:
         Tuple of (total_score, score_breakdown_dict)
     """
     score_breakdown = {
+        "set_number_name_triple": 0,  # NEW: Highest priority combination
+        "set_number_combo": 0,        # NEW: High priority combination
         "name_exact": 0,
         "name_partial": 0,
         "name_tag_team_penalty": 0,
         "number_exact": 0,
         "number_partial": 0,
+        "number_mismatch_penalty": 0,  # NEW: Penalty for wrong number
         "hp_match": 0,
         "type_matches": 0,
         "set_exact": 0,
         "set_partial": 0,
         "shiny_vault_bonus": 0,
+        "visual_series_match": 0,      # NEW: Visual feature bonuses
+        "visual_era_match": 0,         # NEW: Visual era consistency
+        "visual_foil_match": 0,        # NEW: Foil pattern match
     }
     
-    # Name matching (very high priority for exact matches)
-    if gemini_params.get("name") and card_data.get("name"):
-        gemini_name = gemini_params.get("name", "").lower().strip()
-        card_name = card_data.get("name", "").lower().strip()
-        
-        # Exact name match gets highest priority
-        if gemini_name == card_name:
-            score_breakdown["name_exact"] = 2000
-        # Penalize tag team cards when searching for single Pokemon
-        elif "&" in card_name and "&" not in gemini_name:
-            # Card is a tag team but search is for single Pokemon
-            if gemini_name in card_name:
-                score_breakdown["name_partial"] = 100
-                score_breakdown["name_tag_team_penalty"] = -100
-        # Normal partial matches
-        elif gemini_name in card_name or card_name in gemini_name:
-            score_breakdown["name_partial"] = 300
+    # Check for critical combination matches first
+    has_set_match = False
+    has_number_match = False
+    has_name_match = False
     
-    # Card number match (high priority) - exact match required
+    # Set name match check
+    if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
+        gemini_set = str(gemini_params.get("set_name") or "").lower().strip()
+        card_set = str(card_data.get("set", {}).get("name") or "").lower().strip()
+        
+        if gemini_set == card_set:
+            has_set_match = True
+            score_breakdown["set_exact"] = 2000  # Increased from 200
+        elif gemini_set in card_set or card_set in gemini_set:
+            score_breakdown["set_partial"] = 500  # Increased from 100
+    
+    # Card number match check
     if gemini_params.get("number") and card_data.get("number"):
         gemini_number = str(gemini_params.get("number", "")).strip()
         card_number = str(card_data.get("number", "")).strip()
         
         if gemini_number == card_number:
-            score_breakdown["number_exact"] = 1000
+            has_number_match = True
+            score_breakdown["number_exact"] = 2000  # Increased from 1000
         elif gemini_number in card_number or card_number in gemini_number:
-            score_breakdown["number_partial"] = 500
+            score_breakdown["number_partial"] = 800  # Increased from 500
     
-    # HP match (high priority)
+    # Name matching check
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = gemini_params.get("name", "").lower().strip()
+        card_name = card_data.get("name", "").lower().strip()
+        
+        # Exact name match
+        if gemini_name == card_name:
+            has_name_match = True
+            score_breakdown["name_exact"] = 1500  # Decreased from 2000
+        # Penalize tag team cards when searching for single Pokemon
+        elif "&" in card_name and "&" not in gemini_name:
+            # Card is a tag team but search is for single Pokemon
+            if gemini_name in card_name:
+                score_breakdown["name_partial"] = 100
+                score_breakdown["name_tag_team_penalty"] = -500  # Stronger penalty
+        # Normal partial matches
+        elif gemini_name in card_name or card_name in gemini_name:
+            score_breakdown["name_partial"] = 300
+    
+    # PRIME CARD SPECIAL HANDLING
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = str(gemini_params.get("name", "")).lower().strip()
+        card_name = str(card_data.get("name", "")).lower().strip()
+        
+        # Both are Prime cards - strong bonus
+        if "prime" in gemini_name and "prime" in card_name:
+            score_breakdown["prime_card_match"] = 800
+            logger.debug(f"      Prime card match bonus: {gemini_name} <-> {card_name}")
+        
+        # AI detected Prime but card is not Prime - penalty
+        elif "prime" in gemini_name and "prime" not in card_name:
+            # Check if the base Pokemon name matches (e.g., "Houndoom Prime" vs "Houndoom")
+            base_gemini_name = gemini_name.replace(" prime", "").strip()
+            if base_gemini_name in card_name:
+                score_breakdown["prime_vs_regular_penalty"] = -400
+                logger.debug(f"      Prime vs regular penalty: {gemini_name} <-> {card_name}")
+        
+        # Card is Prime but AI didn't detect - smaller penalty
+        elif "prime" not in gemini_name and "prime" in card_name:
+            base_card_name = card_name.replace(" prime", "").strip()
+            if base_card_name in gemini_name:
+                score_breakdown["missed_prime_penalty"] = -200
+    
+    # CRITICAL COMBINATION BONUSES
+    # Triple match: Set + Number + Name = MASSIVE bonus
+    if has_set_match and has_number_match and has_name_match:
+        score_breakdown["set_number_name_triple"] = 5000  # HUGE bonus for perfect match
+    # Dual match: Set + Number = Large bonus
+    elif has_set_match and has_number_match:
+        score_breakdown["set_number_combo"] = 3000  # Large bonus for set+number match
+    
+    # CRITICAL PENALTY: If we have a specific number from AI but card doesn't match, HEAVILY penalize
+    if gemini_params.get("number") and card_data.get("number"):
+        gemini_number = str(gemini_params.get("number", "")).strip()
+        card_number = str(card_data.get("number", "")).strip()
+        
+        # If numbers are completely different (not even partial match), massive penalty
+        if gemini_number != card_number and gemini_number not in card_number and card_number not in gemini_number:
+            score_breakdown["number_mismatch_penalty"] = -2000  # Heavy penalty for wrong number
+    
+    # HP match (medium priority)
     if gemini_params.get("hp") and card_data.get("hp"):
         gemini_hp = str(gemini_params.get("hp", "")).strip()
         card_hp = str(card_data.get("hp", "")).strip()
@@ -210,27 +483,94 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
         if gemini_hp == card_hp:
             score_breakdown["hp_match"] = 400
     
-    # Types match (medium priority)
+    # Types match (HIGH priority - critical for correct identification)
     card_types = card_data.get("types", [])
     gemini_types = gemini_params.get("types", [])
-    if gemini_types and card_types:
-        # Count matching types
-        matching_types = len([t for t in gemini_types if t in card_types])
-        score_breakdown["type_matches"] = matching_types * 100
     
-    # Set name match
-    if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
-        gemini_set = gemini_params.get("set_name", "").lower().strip()
-        card_set = card_data.get("set", {}).get("name", "").lower().strip()
+    if gemini_types and card_types:
+        # Convert to standardized format for comparison
+        card_types_clean = [str(t).strip().title() for t in card_types if t]
+        gemini_types_clean = [str(t).strip().title() for t in gemini_types if t]
         
-        if gemini_set == card_set:
-            score_breakdown["set_exact"] = 200
-        elif gemini_set in card_set or card_set in gemini_set:
-            score_breakdown["set_partial"] = 100
+        # Count matching types
+        matching_types = len([t for t in gemini_types_clean if t in card_types_clean])
+        total_gemini_types = len(gemini_types_clean)
+        total_card_types = len(card_types_clean)
+        
+        if matching_types > 0:
+            # Strong bonus for matching types
+            if matching_types == total_gemini_types and matching_types == total_card_types:
+                # Perfect type match (all types match exactly)
+                score_breakdown["type_perfect_match"] = 800
+            elif matching_types == total_gemini_types:
+                # All AI-detected types match (partial match)
+                score_breakdown["type_ai_complete_match"] = 600
+            else:
+                # Some types match
+                score_breakdown["type_partial_match"] = matching_types * 300
+        else:
+            # MAJOR PENALTY for completely wrong types (e.g., Fire vs Darkness)
+            if total_gemini_types > 0 and total_card_types > 0:
+                score_breakdown["type_mismatch_penalty"] = -1500
+                logger.debug(f"      Type mismatch penalty: AI detected {gemini_types_clean} but card has {card_types_clean}")
+    
+    elif gemini_types and not card_types:
+        # AI detected types but card has none - minor penalty
+        score_breakdown["type_missing_penalty"] = -200
     
     # Special case: Shiny Vault cards
     if card_data.get("number", "").startswith("SV") and gemini_params.get("set_name") == "Hidden Fates":
         score_breakdown["shiny_vault_bonus"] = 300
+    
+    # VISUAL FEATURE MATCHING - Critical for differentiating similar cards
+    visual_features = gemini_params.get("visual_features", {})
+    if visual_features:
+        # Card series matching (e-Card, EX, XY, etc.)
+        if visual_features.get("card_series"):
+            gemini_series = str(visual_features["card_series"]).lower() if visual_features["card_series"] else ""
+            # Map card series to likely set patterns
+            series_patterns = {
+                "e-card": ["aquapolis", "skyridge", "expedition"],
+                "ex": ["ruby", "sapphire", "emerald", "firered", "leafgreen"],
+                "xy": ["xy", "breakpoint", "breakthrough", "fates collide", "steam siege", "evolutions", 
+                       "flashfire", "furious fists", "phantom forces", "primal clash", "roaring skies", "ancient origins"],
+                "sun moon": ["sun", "moon", "ultra", "cosmic", "guardians rising", "burning shadows", 
+                            "crimson invasion", "forbidden light", "celestial storm", "lost thunder"],
+                "sword shield": ["sword", "shield", "battle styles", "chilling reign", "rebel clash", 
+                                "darkness ablaze", "vivid voltage", "evolving skies", "fusion strike"],
+            }
+            
+            card_set_name = card_data.get("set", {}).get("name") or ""
+            card_set_name = card_set_name.lower() if card_set_name else ""
+            for series, patterns in series_patterns.items():
+                if series in gemini_series:
+                    if card_set_name and any(pattern in card_set_name for pattern in patterns):
+                        score_breakdown["visual_series_match"] = 500  # Significant bonus for series match
+                        break
+        
+        # Visual era consistency (vintage cards should match vintage sets)
+        if visual_features.get("visual_era"):
+            gemini_era = str(visual_features["visual_era"]).lower() if visual_features["visual_era"] else ""
+            card_set_name = card_data.get("set", {}).get("name") or ""
+            card_set_name = card_set_name.lower() if card_set_name else ""
+            
+            # Era-based set categorization
+            if "vintage" in gemini_era or "classic" in gemini_era:
+                vintage_sets = ["base", "jungle", "fossil", "aquapolis", "skyridge", "expedition"]
+                if card_set_name and any(vintage in card_set_name for vintage in vintage_sets):
+                    score_breakdown["visual_era_match"] = 300
+            elif "modern" in gemini_era:
+                modern_indicators = ["xy", "sun", "moon", "sword", "shield", "scarlet", "violet"]
+                if card_set_name and any(modern in card_set_name for modern in modern_indicators):
+                    score_breakdown["visual_era_match"] = 300
+        
+        # Foil pattern matching (helps distinguish variants)
+        if visual_features.get("foil_pattern"):
+            foil_pattern = str(visual_features["foil_pattern"]).lower() if visual_features["foil_pattern"] else ""
+            # This would require more detailed card data analysis
+            # For now, give small bonus for any foil detection
+            if any(word in foil_pattern for word in ["holo", "foil", "crystal", "rainbow", "cosmos"]):
+                score_breakdown["visual_foil_match"] = 100
     
     total_score = sum(score_breakdown.values())
     return total_score, score_breakdown
@@ -275,19 +615,76 @@ def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str
             best_score = score
             best_match = card_data
     
-    # Sort all matches by score (highest first)
-    all_scored_matches.sort(key=lambda x: x["score"], reverse=True)
+    # Advanced sorting with tie-breaking logic
+    def advanced_sort_key(match):
+        """
+        Multi-criteria sorting for tie-breaking:
+        1. Primary: Score (highest first)
+        2. Tie-break 1: Exact number match bonus 
+        3. Tie-break 2: Rarity priority (Rare > Uncommon > Common)
+        4. Tie-break 3: Market price (higher value preferred)
+        5. Tie-break 4: Card ID for consistency
+        """
+        score = match["score"]
+        
+        # Tie-break 1: Exact number match gets priority
+        has_exact_number = match["score_breakdown"].get("number_exact", 0) > 0
+        exact_number_bonus = 1000 if has_exact_number else 0
+        
+        # Tie-break 2: Rarity priority
+        rarity = str(match.get("rarity") or "").lower()
+        rarity_priority = {
+            "rare": 300,
+            "uncommon": 200, 
+            "common": 100,
+            "promo": 400,  # Promos often more valuable
+            "secret rare": 500,
+            "ultra rare": 450,
+        }.get(rarity, 0)
+        
+        # Tie-break 3: Market price preference
+        market_price = 0
+        card_data = match["card_data"]
+        if card_data.get("tcgplayer", {}).get("prices"):
+            prices = card_data["tcgplayer"]["prices"]
+            # Look for highest variant price
+            for variant in ["holofoil", "normal", "reverseHolofoil"]:
+                if variant in prices and prices[variant].get("market"):
+                    market_price = max(market_price, prices[variant]["market"])
+        
+        # Tie-break 4: Card ID for consistency (lower = priority, usually means earlier/more common)
+        card_id = match.get("card_id", "zzz")  # Default to low priority
+        id_priority = -ord(card_id[0]) if card_id else 0  # Negative for reverse order
+        
+        return (score, exact_number_bonus, rarity_priority, market_price, id_priority)
+    
+    # Sort with advanced tie-breaking
+    all_scored_matches.sort(key=advanced_sort_key, reverse=True)
+    
+    # Update best_match to the top result after advanced sorting
+    if all_scored_matches:
+        best_match = all_scored_matches[0]["card_data"]
+        best_score = all_scored_matches[0]["score"]
     
     # Log the scoring details for debugging
-    logger.info(f"🎯 Match scoring (showing top 5):")
+    logger.info(f"🎯 Match scoring with tie-breaking (showing top 5):")
     for i, match in enumerate(all_scored_matches[:5]):
-        logger.info(f"   {i+1}. {match.get('card_name', 'Unknown')} #{match.get('card_number', '?')} - Score: {match['score']}")
+        exact_num = "✓" if match["score_breakdown"].get("number_exact", 0) > 0 else "✗"
+        rarity = match.get("rarity", "Unknown")
+        logger.info(f"   {i+1}. {match.get('card_name', 'Unknown')} #{match.get('card_number', '?')} - Score: {match['score']} | ExactNum: {exact_num} | Rarity: {rarity}")
         if match['score_breakdown']:
             breakdown_str = ", ".join([f"{k}: {v}" for k, v in match['score_breakdown'].items() if v > 0])
             logger.info(f"      Breakdown: {breakdown_str}")
     
+    # Check if best match score meets minimum threshold
     if best_match:
-        logger.info(f"✅ Selected best match: {best_match.get('name')} #{best_match.get('number')} (Score: {best_score})")
+        if best_score >= MINIMUM_SCORE_THRESHOLD:
+            logger.info(f"✅ Selected best match after tie-breaking: {best_match.get('name')} #{best_match.get('number')} (Score: {best_score})")
+        else:
+            logger.info(f"❌ Best match score {best_score} below threshold {MINIMUM_SCORE_THRESHOLD}")
+            logger.info(f"   📊 Highest scoring card: {best_match.get('name')} #{best_match.get('number')} from {best_match.get('set', {}).get('name')}")
+            logger.info(f"   💡 This suggests no good matches found - likely card not in database or poor AI extraction")
+            return None, all_scored_matches  # Return no match if score too low
     
     return best_match, all_scored_matches
 
@@ -490,13 +887,24 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                 if set_name and set_name.lower() not in ['unknown', 'n/a', 'not visible']:
                     cleaned_params['set_name'] = set_name
             
+            # If set_name is missing, try to extract it from set_symbol description
+            if 'set_name' not in cleaned_params and 'set_symbol' in search_params and search_params['set_symbol']:
+                set_symbol_desc = str(search_params['set_symbol']).strip().lower()
+                extracted_set_name = _extract_set_name_from_symbol(set_symbol_desc)
+                if extracted_set_name:
+                    cleaned_params['set_name'] = extracted_set_name
+                    logger.info(f"🔍 Extracted set name '{extracted_set_name}' from symbol description: '{set_symbol_desc}'")
+            
             # Clean number
             if 'number' in search_params and search_params['number']:
                 number = str(search_params['number']).strip()
-                # Extract just digits
-                number_match = re.search(r'(\d+)', number)
+                # Extract card number (preserve prefix letters like H in H11/H32)
+                number_match = re.search(r'([A-Za-z]*\d+)', number)
                 if number_match:
                     cleaned_params['number'] = number_match.group(1)
+                else:
+                    # Fallback: just clean whitespace if no standard pattern found
+                    cleaned_params['number'] = number.split('/')[0].strip()
             
             # Clean HP
             if 'hp' in search_params and search_params['hp']:
@@ -526,6 +934,30 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             # Add supertype if not present
             if 'supertype' in search_params:
                 cleaned_params['supertype'] = search_params['supertype']
+            
+            # Extract visual distinguishing features for better card differentiation
+            visual_features = {}
+            
+            if 'set_symbol' in search_params and search_params['set_symbol']:
+                visual_features['set_symbol'] = str(search_params['set_symbol']).strip()
+            
+            if 'card_series' in search_params and search_params['card_series']:
+                visual_features['card_series'] = str(search_params['card_series']).strip()
+            
+            if 'visual_era' in search_params and search_params['visual_era']:
+                visual_features['visual_era'] = str(search_params['visual_era']).strip()
+            
+            if 'foil_pattern' in search_params and search_params['foil_pattern']:
+                visual_features['foil_pattern'] = str(search_params['foil_pattern']).strip()
+            
+            if 'border_color' in search_params and search_params['border_color']:
+                visual_features['border_color'] = str(search_params['border_color']).strip()
+            
+            if 'energy_symbol_style' in search_params and search_params['energy_symbol_style']:
+                visual_features['energy_symbol_style'] = str(search_params['energy_symbol_style']).strip()
+            
+            if visual_features:
+                cleaned_params['visual_features'] = visual_features
             
             logger.info(f"✅ Extracted structured TCG search parameters: {cleaned_params}")
             return cleaned_params
@@ -664,6 +1096,14 @@ async def scan_pokemon_card(request: ScanRequest):
         
         parsed_data = parse_gemini_response(gemini_data["response"])
         
+        # Log the extracted parameters for debugging
+        logger.info(f"🎯 Extracted TCG search parameters from Gemini:")
+        logger.info(f"   📛 Name: '{parsed_data.get('name')}'")
+        logger.info(f"   🏷️ Set: '{parsed_data.get('set_name')}'")
+        logger.info(f"   🔢 Number: '{parsed_data.get('number')}'")
+        logger.info(f"   ❤️ HP: '{parsed_data.get('hp')}'")
+        logger.info(f"   🎨 Types: {parsed_data.get('types')}")
+        
         # Create card type info object
         card_type_info = None
         if parsed_data.get("card_type_info"):
@@ -701,6 +1141,7 @@ async def scan_pokemon_card(request: ScanRequest):
         
         # Step 3: Search TCG database
         logger.info("🎯 Searching Pokemon TCG database...")
+        logger.info(f"🔍 Search parameters: name='{parsed_data.get('name')}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}', hp='{parsed_data.get('hp')}'")
         tcg_start = time.time()
         
         tcg_client = PokemonTcgClient()
@@ -710,76 +1151,143 @@ async def scan_pokemon_card(request: ScanRequest):
         all_match_scores = []  # Initialize here so it's always available
         
         if parsed_data.get("name"):
-            # Strategy 1: Try exact match with all parameters
-            logger.info("🎯 Strategy 1: Exact search with all parameters")
-            tcg_results = await tcg_client.search_cards(
-                name=parsed_data["name"],
-                set_name=parsed_data.get("set_name"),
-                number=parsed_data.get("number"),
-                hp=parsed_data.get("hp"),
-                types=parsed_data.get("types"),
-                page_size=10,
-                fuzzy=False,
-            )
-            search_attempts.append({
-                "strategy": "exact_all_params",
-                "query": {
-                    "name": parsed_data["name"],
-                    "set_name": parsed_data.get("set_name"),
-                    "number": parsed_data.get("number"),
-                    "hp": parsed_data.get("hp"),
-                    "types": parsed_data.get("types"),
-                },
-                "results": len(tcg_results.get("data", [])),
-            })
+            all_search_results = []  # Collect results from all strategies
             
-            # Strategy 2: If no exact matches, try name + set only
-            if not tcg_results.get("data") and parsed_data.get("set_name"):
-                logger.info("🔄 Strategy 2: Name + set only")
-                tcg_results = await tcg_client.search_cards(
+            # Strategy 1: HIGHEST PRIORITY - Set + Number + Name (exact match)
+            if parsed_data.get("set_name") and parsed_data.get("number"):
+                logger.info("🎯 Strategy 1: Set + Number + Name (PRIORITY)")
+                logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}'")
+                strategy1_results = await tcg_client.search_cards(
+                    name=parsed_data["name"],
+                    set_name=parsed_data.get("set_name"),
+                    number=parsed_data.get("number"),
+                    page_size=5,
+                    fuzzy=False,
+                )
+                if strategy1_results.get("data"):
+                    all_search_results.extend(strategy1_results["data"])
+                    logger.info(f"✅ Strategy 1 found {len(strategy1_results['data'])} exact matches")
+                    for result in strategy1_results["data"][:3]:  # Log first 3 matches
+                        logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                else:
+                    logger.info("   ❌ Strategy 1: No exact matches found")
+                
+                search_attempts.append({
+                    "strategy": "set_number_name_exact",
+                    "query": {
+                        "name": parsed_data["name"],
+                        "set_name": parsed_data.get("set_name"),
+                        "number": parsed_data.get("number"),
+                    },
+                    "results": len(strategy1_results.get("data", [])),
+                })
+                
+                # Strategy 1.5: Set Family + Number + Name (for cases like "XY" -> "XY BREAKpoint")
+                if len(all_search_results) == 0 and parsed_data.get("set_name") and parsed_data.get("number"):
+                    set_family = _get_set_family(parsed_data.get("set_name"))
+                    if set_family:
+                        logger.info(f"🔄 Strategy 1.5: Set Family expansion for '{parsed_data.get('set_name')}'")
+                        logger.info(f"   📚 Set family contains: {set_family}")
+                        for family_set in set_family:
+                            logger.info(f"   🔍 Searching in family set: '{family_set}'")
+                            strategy1_5_results = await tcg_client.search_cards(
+                                name=parsed_data["name"],
+                                set_name=family_set,
+                                number=parsed_data.get("number"),
+                                page_size=3,
+                                fuzzy=False,
+                            )
+                            if strategy1_5_results.get("data"):
+                                new_results = [card for card in strategy1_5_results["data"] 
+                                             if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                                all_search_results.extend(new_results)
+                                logger.info(f"✅ Strategy 1.5 found {len(new_results)} matches in {family_set}")
+                                for result in new_results[:2]:  # Log first 2 matches
+                                    logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                            else:
+                                logger.info(f"   ❌ No matches in '{family_set}'")
+                                
+                        search_attempts.append({
+                            "strategy": "set_family_number_name",
+                            "query": {
+                                "name": parsed_data["name"],
+                                "set_family": set_family,
+                                "number": parsed_data.get("number"),
+                            },
+                            "results": len([r for r in all_search_results if "strategy1_5" in str(r)]),
+                        })
+            
+            # Strategy 2: Set + Name (without number constraint)
+            if parsed_data.get("set_name"):
+                logger.info("🔄 Strategy 2: Set + Name (no number)")
+                logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}'")
+                strategy2_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
                     set_name=parsed_data.get("set_name"),
                     page_size=10,
                     fuzzy=False,
                 )
+                if strategy2_results.get("data"):
+                    # Only add if not already found in strategy 1
+                    new_results = [card for card in strategy2_results["data"] 
+                                 if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                    all_search_results.extend(new_results)
+                    logger.info(f"✅ Strategy 2 found {len(new_results)} additional matches")
+                    for result in new_results[:3]:  # Log first 3 new matches
+                        logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                else:
+                    logger.info("   ❌ Strategy 2: No set+name matches found")
+                
                 search_attempts.append({
-                    "strategy": "name_set_only",
+                    "strategy": "set_name_only",
                     "query": {
                         "name": parsed_data["name"],
                         "set_name": parsed_data.get("set_name"),
                     },
-                    "results": len(tcg_results.get("data", [])),
+                    "results": len(strategy2_results.get("data", [])),
                 })
             
-            # Strategy 3: If still no matches, try fuzzy search with name + set
-            if not tcg_results.get("data") and parsed_data.get("set_name"):
-                logger.info("🔄 Strategy 3: Fuzzy search with name + set")
-                tcg_results = await tcg_client.search_cards(
+            # Strategy 3: Name + HP (cross-set search with HP validation)
+            if parsed_data.get("hp") and len(all_search_results) < 5:
+                logger.info("🔄 Strategy 3: Name + HP (cross-set)")
+                strategy3_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
-                    set_name=parsed_data.get("set_name"),
+                    hp=parsed_data.get("hp"),
                     page_size=10,
-                    fuzzy=True,
+                    fuzzy=False,
                 )
+                if strategy3_results.get("data"):
+                    new_results = [card for card in strategy3_results["data"] 
+                                 if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                    all_search_results.extend(new_results)
+                    logger.info(f"✅ Strategy 3 found {len(new_results)} HP-matching cards")
+                
                 search_attempts.append({
-                    "strategy": "fuzzy_name_set",
+                    "strategy": "name_hp_cross_set",
                     "query": {
                         "name": parsed_data["name"],
-                        "set_name": parsed_data.get("set_name"),
+                        "hp": parsed_data.get("hp"),
                     },
-                    "results": len(tcg_results.get("data", [])),
+                    "results": len(strategy3_results.get("data", [])),
                 })
             
             # Strategy 4: Special case for Hidden Fates Shiny Vault numbers
-            if not tcg_results.get("data") and parsed_data.get("set_name") == "Hidden Fates" and parsed_data.get("number"):
+            if parsed_data.get("set_name") == "Hidden Fates" and parsed_data.get("number") and len(all_search_results) < 3:
                 logger.info("🔄 Strategy 4: Hidden Fates with SV prefix")
                 sv_number = f"SV{parsed_data['number']}"
-                tcg_results = await tcg_client.search_cards(
+                strategy4_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
                     set_name=parsed_data.get("set_name"),
                     number=sv_number,
-                    page_size=10,
+                    page_size=5,
                     fuzzy=False,
                 )
+                if strategy4_results.get("data"):
+                    new_results = [card for card in strategy4_results["data"] 
+                                 if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                    all_search_results.extend(new_results)
+                    logger.info(f"✅ Strategy 4 found {len(new_results)} SV-prefixed cards")
+                
                 search_attempts.append({
                     "strategy": "hidden_fates_sv_prefix",
                     "query": {
@@ -787,28 +1295,44 @@ async def scan_pokemon_card(request: ScanRequest):
                         "set_name": parsed_data.get("set_name"),
                         "number": sv_number,
                     },
-                    "results": len(tcg_results.get("data", [])),
+                    "results": len(strategy4_results.get("data", [])),
                 })
             
-            # Strategy 5: If still no matches, try fuzzy search with name only
-            if not tcg_results.get("data"):
-                logger.info("🔄 Strategy 5: Fuzzy search with name only")
-                tcg_results = await tcg_client.search_cards(
+            # Strategy 5: Fallback - Name only (fuzzy search)
+            if len(all_search_results) < 5:
+                logger.info("🔄 Strategy 5: Fallback name-only (fuzzy)")
+                strategy5_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
-                    page_size=20,  # Increase page size for broader search
+                    page_size=15,
                     fuzzy=True,
                 )
+                if strategy5_results.get("data"):
+                    new_results = [card for card in strategy5_results["data"] 
+                                 if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                    all_search_results.extend(new_results[:10])  # Limit fallback results
+                    logger.info(f"✅ Strategy 5 found {len(new_results[:10])} fallback matches")
+                
                 search_attempts.append({
-                    "strategy": "fuzzy_name_only",
+                    "strategy": "fuzzy_name_only_fallback",
                     "query": {
                         "name": parsed_data["name"],
                     },
-                    "results": len(tcg_results.get("data", [])),
+                    "results": len(strategy5_results.get("data", [])),
                 })
             
+            # Use combined results
+            tcg_results = {"data": all_search_results}
+            
             # Log search strategy results
+            logger.info(f"📊 Search Strategy Summary:")
             for attempt in search_attempts:
                 logger.info(f"   📊 {attempt['strategy']}: {attempt['results']} results")
+            
+            logger.info(f"🎯 Total combined search results: {len(all_search_results)} cards found")
+            if all_search_results:
+                logger.info(f"📋 Sample results:")
+                for i, result in enumerate(all_search_results[:5]):  # Show first 5
+                    logger.info(f"   {i+1}. {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
             
             # Convert to PokemonCard objects and find best match
             tcg_card_data = tcg_results.get("data", [])
@@ -827,6 +1351,21 @@ async def scan_pokemon_card(request: ScanRequest):
             
             # Select the best match using intelligent scoring and get all matches
             best_match_data, all_scored_matches = select_best_match(tcg_card_data, parsed_data)
+            
+            # Check if no good match was found due to low scores
+            if best_match_data is None and all_scored_matches:
+                highest_score = all_scored_matches[0]["score"] if all_scored_matches else 0
+                highest_card = all_scored_matches[0] if all_scored_matches else None
+                
+                logger.warning(f"❌ Card not found: Highest score {highest_score} below threshold {MINIMUM_SCORE_THRESHOLD}")
+                if highest_card:
+                    logger.info(f"   📊 Best candidate: {highest_card.get('card_name')} #{highest_card.get('card_number')} from {highest_card.get('set_name')}")
+                
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Card not found: No matching Pokemon cards found in database. Highest match score was {highest_score} (needed {MINIMUM_SCORE_THRESHOLD}). Try a clearer image with better lighting or ensure the card is fully visible and centered."
+                )
+            
             best_match_card = None
             logger.info(f"📊 Processing {len(all_scored_matches)} scored matches for detailed response")
             
@@ -858,6 +1397,13 @@ async def scan_pokemon_card(request: ScanRequest):
                 # Generate human-readable reasoning
                 reasoning = []
                 breakdown = match_info["score_breakdown"]
+                
+                # Show combination bonuses first (most important)
+                if breakdown.get("set_number_name_triple"):
+                    reasoning.append(f"🎯 PERFECT MATCH: Set+Number+Name (+{breakdown['set_number_name_triple']})")
+                elif breakdown.get("set_number_combo"):
+                    reasoning.append(f"🎯 STRONG MATCH: Set+Number (+{breakdown['set_number_combo']})")
+                
                 if breakdown.get("name_exact"):
                     reasoning.append(f"Exact name match (+{breakdown['name_exact']})")
                 elif breakdown.get("name_partial"):
@@ -866,18 +1412,26 @@ async def scan_pokemon_card(request: ScanRequest):
                     reasoning.append(f"Exact number match (+{breakdown['number_exact']})")
                 elif breakdown.get("number_partial"):
                     reasoning.append(f"Partial number match (+{breakdown['number_partial']})")
-                if breakdown.get("hp_match"):
-                    reasoning.append(f"HP match (+{breakdown['hp_match']})")
-                if breakdown.get("type_matches"):
-                    reasoning.append(f"Type matches (+{breakdown['type_matches']})")
                 if breakdown.get("set_exact"):
                     reasoning.append(f"Exact set match (+{breakdown['set_exact']})")
                 elif breakdown.get("set_partial"):
                     reasoning.append(f"Partial set match (+{breakdown['set_partial']})")
+                if breakdown.get("hp_match"):
+                    reasoning.append(f"HP match (+{breakdown['hp_match']})")
+                if breakdown.get("type_matches"):
+                    reasoning.append(f"Type matches (+{breakdown['type_matches']})")
                 if breakdown.get("shiny_vault_bonus"):
                     reasoning.append(f"Shiny Vault bonus (+{breakdown['shiny_vault_bonus']})")
+                if breakdown.get("visual_series_match"):
+                    reasoning.append(f"🎨 Series match (+{breakdown['visual_series_match']})")
+                if breakdown.get("visual_era_match"):
+                    reasoning.append(f"🕰️ Era match (+{breakdown['visual_era_match']})")
+                if breakdown.get("visual_foil_match"):
+                    reasoning.append(f"✨ Foil match (+{breakdown['visual_foil_match']})")
                 if breakdown.get("name_tag_team_penalty"):
                     reasoning.append(f"Tag team penalty ({breakdown['name_tag_team_penalty']})")
+                if breakdown.get("number_mismatch_penalty"):
+                    reasoning.append(f"❌ WRONG NUMBER ({breakdown['number_mismatch_penalty']})")
                 
                 match_score = MatchScore(
                     card=pokemon_card,

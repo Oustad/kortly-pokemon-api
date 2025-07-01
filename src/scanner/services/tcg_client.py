@@ -101,6 +101,14 @@ class PokemonTcgClient:
         "Fates Collide": "Fates Collide",
         "Steam Siege": "Steam Siege",
         "Evolutions": "Evolutions",
+        # HeartGold/SoulSilver series
+        "HeartGold & SoulSilver": "HeartGold & SoulSilver",
+        "HS—Unleashed": "HS—Unleashed",
+        "HS—Undaunted": "HS—Undaunted", 
+        "HS—Triumphant": "HS—Triumphant",
+        "Unleashed": "HS—Unleashed",
+        "Undaunted": "HS—Undaunted",
+        "Triumphant": "HS—Triumphant",
     }
 
     def __init__(
@@ -291,6 +299,7 @@ class PokemonTcgClient:
             # Map the set name to handle common discrepancies
             mapped_set_name = self._map_set_name(set_name)
             query_parts.append(f'set.name:"{mapped_set_name}"')
+            logger.info(f"   🗺️ Set name mapping: '{set_name}' → '{mapped_set_name}'")
         if number:
             # Normalize card number
             normalized_number = self._normalize_card_number(number)
@@ -305,6 +314,7 @@ class PokemonTcgClient:
             
         if query_parts:
             params["q"] = " ".join(query_parts)
+            logger.info(f"   🔍 TCG API Query: {params['q']}")
             
         if order_by:
             params["orderBy"] = order_by

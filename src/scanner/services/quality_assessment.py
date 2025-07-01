@@ -18,8 +18,8 @@ class QualityAssessment:
     """Assess image quality for optimal processing pipeline routing."""
     
     def __init__(self):
-        self.min_resolution = (200, 300)  # Minimum card dimensions
-        self.optimal_resolution = (600, 800)  # Optimal card dimensions
+        self.min_resolution = (150, 200)  # Minimum card dimensions (lowered for mobile photos)
+        self.optimal_resolution = (400, 600)  # More realistic optimal card dimensions
         
     def assess_image_quality(self, image_bytes: bytes) -> Dict:
         """
@@ -66,6 +66,13 @@ class QualityAssessment:
             lighting_score = self._assess_lighting(img)
             card_detection_score = self._assess_card_presence(img)
             
+            # Debug logging for quality scores
+            logger.info(f"🔍 Quality Assessment Breakdown:")
+            logger.info(f"   📐 Resolution: {resolution_score:.1f}/100 (size: {pil_img.size})")
+            logger.info(f"   🌟 Blur/Sharpness: {blur_score:.1f}/100")
+            logger.info(f"   💡 Lighting: {lighting_score:.1f}/100")
+            logger.info(f"   🎴 Card Detection: {card_detection_score:.1f}/100")
+            
             # Calculate composite score
             composite_score = self._calculate_composite_score({
                 'blur': blur_score,
@@ -73,6 +80,8 @@ class QualityAssessment:
                 'lighting': lighting_score,
                 'card_detection': card_detection_score
             })
+            
+            logger.info(f"   🏆 Composite Score: {composite_score:.1f}/100")
             
             # Generate feedback
             feedback = self._generate_feedback({
@@ -108,16 +117,19 @@ class QualityAssessment:
             variance = laplacian.var()
             
             # Scale variance to 0-100 score
-            # Sharp images typically have variance > 500
+            # Sharp images typically have variance > 300 (adjusted from 500)
             # Blurry images have variance < 100
-            if variance > 500:
-                return 100.0
-            elif variance > 200:
-                return 80.0 + (variance - 200) * 20.0 / 300.0
+            if variance > 300:
+                score = 100.0
+            elif variance > 150:
+                score = 85.0 + (variance - 150) * 15.0 / 150.0
             elif variance > 50:
-                return 40.0 + (variance - 50) * 40.0 / 150.0
+                score = 50.0 + (variance - 50) * 35.0 / 100.0
             else:
-                return variance * 40.0 / 50.0
+                score = variance * 50.0 / 50.0
+            
+            logger.debug(f"      Blur analysis: Laplacian variance = {variance:.1f}, Score = {score:.1f}")
+            return score
                 
         except Exception as e:
             logger.warning(f"Blur assessment failed: {e}")
@@ -154,19 +166,25 @@ class QualityAssessment:
             hist = cv2.calcHist([v_channel], [0], None, [256], [0, 256])
             hist_norm = hist.flatten() / hist.sum()
             
-            # Check for over/under exposure
-            underexposed = hist_norm[:50].sum()  # Dark pixels
-            overexposed = hist_norm[200:].sum()   # Bright pixels
+            # Check for over/under exposure (more lenient thresholds)
+            underexposed = hist_norm[:40].sum()  # Very dark pixels
+            overexposed = hist_norm[220:].sum()   # Very bright pixels
+            mid_range = hist_norm[40:220].sum()   # Good lighting range
             
-            # Ideal lighting has balanced distribution
-            if underexposed > 0.4:  # Too dark
-                return max(20.0, 60.0 - underexposed * 100.0)
-            elif overexposed > 0.3:  # Too bright
-                return max(20.0, 70.0 - overexposed * 100.0)
+            # Debug logging
+            logger.debug(f"      Lighting analysis: underexposed={underexposed:.3f}, overexposed={overexposed:.3f}, mid_range={mid_range:.3f}")
+            
+            # More forgiving lighting assessment
+            if underexposed > 0.6:  # Severely underexposed
+                score = max(30.0, 70.0 - underexposed * 80.0)
+            elif overexposed > 0.4:  # Severely overexposed  
+                score = max(30.0, 80.0 - overexposed * 100.0)
             else:
-                # Good lighting - score based on distribution balance
-                mid_range = hist_norm[50:200].sum()
-                return min(100.0, mid_range * 120.0)
+                # Good lighting - base score of 70, bonus for good mid-range distribution
+                score = 70.0 + min(30.0, mid_range * 35.0)
+            
+            logger.debug(f"      Lighting score: {score:.1f}")
+            return score
                 
         except Exception as e:
             logger.warning(f"Lighting assessment failed: {e}")
@@ -201,18 +219,19 @@ class QualityAssessment:
                     area = cv2.contourArea(contour)
                     area_ratio = area / img_area
                     
-                    # Cards should occupy reasonable portion of image
-                    if 0.1 < area_ratio < 0.8:
+                    # Cards should occupy reasonable portion of image (more forgiving)
+                    if 0.05 < area_ratio < 0.9:
                         # Calculate aspect ratio
                         rect = cv2.minAreaRect(contour)
                         width, height = rect[1]
                         if width > 0 and height > 0:
                             aspect = max(width, height) / min(width, height)
-                            # Card aspect ratio is roughly 2.5:3.5 (0.71) to 3:4 (0.75)
-                            if 1.2 < aspect < 2.0:  # Reasonable card-like aspect ratio
-                                score = min(100.0, area_ratio * 200.0 + (2.0 - abs(aspect - 1.4)) * 20.0)
+                            # More forgiving aspect ratio for card-like shapes
+                            if 1.1 < aspect < 2.2:  # More lenient card-like aspect ratio
+                                score = min(100.0, area_ratio * 150.0 + (2.2 - abs(aspect - 1.4)) * 25.0)
                                 best_score = max(best_score, score)
             
+            logger.debug(f"      Card detection: Found {len(contours)} contours, Best score = {best_score:.1f}")
             return max(30.0, best_score)  # Minimum score for any detected shapes
             
         except Exception as e:
@@ -222,8 +241,8 @@ class QualityAssessment:
     def _calculate_composite_score(self, scores: Dict[str, float]) -> float:
         """Calculate weighted composite quality score."""
         weights = {
-            'blur': 0.3,           # Most important for OCR/AI
-            'resolution': 0.25,     # Important for detail
+            'blur': 0.4,           # Most important for OCR/AI
+            'resolution': 0.15,     # Less important - mobile photos are often smaller
             'lighting': 0.25,       # Important for visibility
             'card_detection': 0.2   # Important but can be compensated
         }
@@ -285,9 +304,8 @@ class QualityAssessment:
     
     def get_processing_tier(self, quality_score: float) -> str:
         """Determine processing tier based on quality score."""
-        if quality_score >= 80:
-            return 'fast'
-        elif quality_score >= 50:
-            return 'standard'
-        else:
-            return 'enhanced'
+        # OVERRIDE: Always use enhanced prompt for comprehensive card analysis
+        # This ensures Prime cards, HGSS era cards, and complex cards are properly detected
+        original_tier = 'fast' if quality_score >= 80 else ('standard' if quality_score >= 50 else 'enhanced')
+        logger.info(f"🚀 Forcing enhanced prompt (was: {original_tier}, quality: {quality_score:.1f}) for comprehensive analysis")
+        return 'enhanced'

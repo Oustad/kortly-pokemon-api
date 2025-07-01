@@ -202,6 +202,16 @@ class ProcessingPipeline:
         if tier_config['enhance_image']:
             image = self._enhance_image(image, tier_config)
         
+        # Convert to RGB if necessary (JPEG doesn't support transparency)
+        if image.mode not in ("RGB", "L"):
+            if image.mode == "RGBA":
+                # Create white background for transparent images
+                background = Image.new("RGB", image.size, (255, 255, 255))
+                background.paste(image, mask=image.split()[3])
+                image = background
+            else:
+                image = image.convert("RGB")
+        
         # Convert back to bytes
         output_buffer = io.BytesIO()
         
