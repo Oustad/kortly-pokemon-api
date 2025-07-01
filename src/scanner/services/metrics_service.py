@@ -115,6 +115,9 @@ class MetricsService:
         
         # Update hourly metrics
         hour_key = request_metrics.timestamp.replace(minute=0, second=0, microsecond=0)
+        # Ensure the hour key exists in the dictionary
+        if hour_key not in self._hourly_metrics:
+            self._hourly_metrics[hour_key] = ServiceMetrics()
         hourly = self._hourly_metrics[hour_key]
         hourly.total_requests += 1
         if 200 <= request_metrics.status_code < 400:

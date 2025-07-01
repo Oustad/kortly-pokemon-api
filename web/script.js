@@ -189,7 +189,8 @@ async function scanCard() {
                 include_cost_tracking: true,  // Default to tracking costs
                 retry_on_truncation: true,
                 prefer_speed: false,
-                max_processing_time: null  // No time limit for better results
+                max_processing_time: null,  // No time limit for better results
+                response_format: "detailed"  // Get detailed response with all matches
             }
         };
         
@@ -245,15 +246,23 @@ function displayResults(data) {
     // Store the response data globally for JSON view
     window.lastScanResult = data;
     
+    // Debug logging
+    console.log('Received scan data:', data);
+    console.log('Has all_tcg_matches:', !!data.all_tcg_matches);
+    console.log('All TCG matches count:', data.all_tcg_matches?.length || 0);
+    console.log('Regular TCG matches count:', data.tcg_matches?.length || 0);
+    
     hideAllSections();
     document.getElementById('resultsSection').style.display = 'block';
     
     // Check if we have a simplified response
     if (data.name && !data.card_identification) {
         // Simplified response
+        console.log('Using simplified response display');
         displaySimplifiedResults(data);
     } else {
         // Detailed response (legacy)
+        console.log('Using detailed response display');
         displayDetailedResults(data);
     }
 }
@@ -363,8 +372,8 @@ function displayDetailedResults(data) {
     // Display Gemini identification
     displayIdentification(data.card_identification);
     
-    // Display TCG matches
-    displayMatches(data.tcg_matches, data.best_match);
+    // Display TCG matches (with new detailed scoring if available)
+    displayMatches(data.tcg_matches, data.best_match, data.all_tcg_matches);
 }
 
 function displayUploadedImage() {
@@ -879,31 +888,82 @@ function createDataItem(label, value) {
     `;
 }
 
-function displayMatches(matches, bestMatch) {
+function displayMatches(matches, bestMatch, allScoredMatches) {
     const matchesDiv = document.getElementById('tcgMatches');
     matchesDiv.innerHTML = '';
     
-    if (!matches || matches.length === 0) {
+    // Debug logging
+    console.log('displayMatches called with:');
+    console.log('- matches:', matches?.length || 0, 'items');
+    console.log('- bestMatch:', bestMatch?.name || 'none');
+    console.log('- allScoredMatches:', allScoredMatches?.length || 0, 'items');
+    
+    // Use detailed scored matches if available, otherwise fall back to regular matches
+    const matchesToDisplay = allScoredMatches || matches;
+    
+    if (!matchesToDisplay || matchesToDisplay.length === 0) {
         matchesDiv.innerHTML = '<p style="color: var(--text-secondary);">No matches found in the Pokemon TCG database.</p>';
         return;
     }
     
-    // Display matches
-    matches.slice(0, 5).forEach((card, index) => {
-        const isBestMatch = bestMatch && card.id === bestMatch.id;
-        const matchCard = createMatchCard(card, isBestMatch);
-        matchesDiv.appendChild(matchCard);
-    });
+    // Add header with toggle for showing all matches
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'matches-header';
+    headerDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <div>
+                <span style="font-weight: bold;">Found ${matchesToDisplay.length} potential matches</span>
+                ${allScoredMatches ? '<span style="color: var(--text-secondary); font-size: 0.9rem; margin-left: 0.5rem;">(with scoring details)</span>' : ''}
+            </div>
+            ${matchesToDisplay.length > 3 ? `
+                <button class="btn-secondary btn-sm" onclick="toggleAllMatches()" id="toggleMatchesBtn">
+                    Show All Matches
+                </button>
+            ` : ''}
+        </div>
+    `;
+    matchesDiv.appendChild(headerDiv);
     
-    if (matches.length > 5) {
-        const moreDiv = document.createElement('div');
-        moreDiv.style.cssText = 'text-align: center; padding: 15px; color: var(--text-secondary);';
-        moreDiv.textContent = `... and ${matches.length - 5} more matches`;
-        matchesDiv.appendChild(moreDiv);
+    // Display matches container
+    const matchesContainer = document.createElement('div');
+    matchesContainer.id = 'matchesContainer';
+    matchesDiv.appendChild(matchesContainer);
+    
+    // Display initial matches (top 3)
+    displayMatchesSet(matchesToDisplay, bestMatch, matchesContainer, 3);
+}
+
+function displayMatchesSet(matchesToDisplay, bestMatch, container, limit) {
+    container.innerHTML = '';
+    
+    const matchesToShow = limit ? matchesToDisplay.slice(0, limit) : matchesToDisplay;
+    
+    matchesToShow.forEach((matchItem, index) => {
+        const isScored = matchItem.card && matchItem.score !== undefined;
+        const card = isScored ? matchItem.card : matchItem;
+        const isBestMatch = bestMatch && card.id === bestMatch.id;
+        
+        const matchCard = createMatchCard(card, isBestMatch, isScored ? matchItem : null, index + 1);
+        container.appendChild(matchCard);
+    });
+}
+
+function toggleAllMatches() {
+    const container = document.getElementById('matchesContainer');
+    const button = document.getElementById('toggleMatchesBtn');
+    const allMatches = window.lastScanResult?.all_tcg_matches || window.lastScanResult?.tcg_matches || [];
+    const bestMatch = window.lastScanResult?.best_match;
+    
+    if (button.textContent === 'Show All Matches') {
+        displayMatchesSet(allMatches, bestMatch, container);
+        button.textContent = 'Show Top 3';
+    } else {
+        displayMatchesSet(allMatches, bestMatch, container, 3);
+        button.textContent = 'Show All Matches';
     }
 }
 
-function createMatchCard(card, isBestMatch) {
+function createMatchCard(card, isBestMatch, scoredMatch, rank) {
     const div = document.createElement('div');
     div.className = 'match-card' + (isBestMatch ? ' best-match' : '');
     
@@ -917,7 +977,41 @@ function createMatchCard(card, isBestMatch) {
             <strong>Market Price:</strong> ${formatPrices(card.market_prices)}
         </div>` : '';
     
+    // Scoring information if available
+    let scoringHtml = '';
+    if (scoredMatch) {
+        const confidenceColor = {
+            'high': '#10b981',
+            'medium': '#f59e0b', 
+            'low': '#ef4444'
+        }[scoredMatch.confidence] || '#6b7280';
+        
+        scoringHtml = `
+            <div class="match-scoring" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 6px; border-left: 4px solid ${confidenceColor};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="font-weight: bold; color: ${confidenceColor};">Match Score: ${scoredMatch.score}</span>
+                    <span style="font-size: 0.9rem; color: ${confidenceColor};">${scoredMatch.confidence.toUpperCase()} confidence</span>
+                </div>
+                ${scoredMatch.reasoning && scoredMatch.reasoning.length > 0 ? `
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                        <strong>Why this match:</strong>
+                        <ul style="margin: 0.25rem 0 0 1rem; padding: 0;">
+                            ${scoredMatch.reasoning.map(reason => `<li>${reason}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+                <button class="btn-sm" onclick="toggleScoreBreakdown('${card.id}')" style="margin-top: 0.5rem; font-size: 0.8rem;">
+                    Show Score Breakdown
+                </button>
+                <div id="breakdown-${card.id}" style="display: none; margin-top: 0.5rem; font-size: 0.8rem;">
+                    ${formatScoreBreakdown(scoredMatch.score_breakdown)}
+                </div>
+            </div>
+        `;
+    }
+    
     div.innerHTML = `
+        ${rank ? `<div class="match-rank" style="position: absolute; top: 0.5rem; left: 0.5rem; background: var(--primary-color); color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold;">${rank}</div>` : ''}
         ${imageHtml}
         <div class="match-info">
             <div class="match-name">${card.name} ${isBestMatch ? '⭐' : ''}</div>
@@ -933,8 +1027,14 @@ function createMatchCard(card, isBestMatch) {
                 <strong>Rarity:</strong> ${card.rarity || 'Unknown'}
             </div>
             ${priceHtml}
+            ${scoringHtml}
         </div>
     `;
+    
+    // Make the card position relative for the rank number
+    if (rank) {
+        div.style.position = 'relative';
+    }
     
     return div;
 }
@@ -951,6 +1051,35 @@ function formatPrices(prices) {
     }
     
     return parts.join(' | ') || 'N/A';
+}
+
+function formatScoreBreakdown(breakdown) {
+    if (!breakdown) return 'No breakdown available';
+    
+    const items = [];
+    for (const [key, value] of Object.entries(breakdown)) {
+        if (value !== 0) {
+            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const sign = value > 0 ? '+' : '';
+            const color = value > 0 ? '#10b981' : '#ef4444';
+            items.push(`<span style="color: ${color};">${label}: ${sign}${value}</span>`);
+        }
+    }
+    
+    return items.length > 0 ? items.join('<br>') : 'No score components';
+}
+
+function toggleScoreBreakdown(cardId) {
+    const breakdown = document.getElementById(`breakdown-${cardId}`);
+    const button = event.target;
+    
+    if (breakdown.style.display === 'none') {
+        breakdown.style.display = 'block';
+        button.textContent = 'Hide Score Breakdown';
+    } else {
+        breakdown.style.display = 'none';
+        button.textContent = 'Show Score Breakdown';
+    }
 }
 
 // Image processing utilities

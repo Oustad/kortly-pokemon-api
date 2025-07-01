@@ -252,18 +252,18 @@ class ProcessingPipeline:
             'success': True,
             'card_data': gemini_result,
             'processing': {
-                'quality_score': quality_result['quality_score'],
-                'quality_feedback': quality_result['details'].get('feedback', {}),
+                'quality_score': quality_result.get('quality_score', 0),
+                'quality_feedback': quality_result.get('details', {}).get('feedback', {}),
                 'processing_tier': tier,
-                'target_time_ms': tier_config['target_time_ms'],
+                'target_time_ms': tier_config.get('target_time_ms', 0),
                 'actual_time_ms': total_time,
                 'model_used': config.gemini_model,
-                'image_enhanced': tier_config['enhance_image'],
+                'image_enhanced': tier_config.get('enhance_image', False),
                 'timing_breakdown': timing_breakdown,
                 'processing_log': processing_log,
                 'performance_rating': self._get_performance_rating(
                     total_time, 
-                    tier_config['target_time_ms']
+                    tier_config.get('target_time_ms', 0)
                 )
             }
         }
@@ -293,13 +293,13 @@ class ProcessingPipeline:
         }
         
         if quality_result and quality_result.get('details', {}).get('feedback'):
-            quality_feedback = quality_result['details']['feedback']
+            quality_feedback = quality_result.get('details', {}).get('feedback', {})
         
         return {
             'success': False,
             'error': error_message,
             'processing': {
-                'quality_score': quality_result['quality_score'] if quality_result else 0.0,
+                'quality_score': quality_result.get('quality_score', 0.0) if quality_result else 0.0,
                 'quality_feedback': quality_feedback,
                 'processing_tier': 'failed',
                 'target_time_ms': 2000,  # Default target
@@ -331,10 +331,10 @@ class ProcessingPipeline:
             'tiers': {
                 tier: {
                     'description': self._get_tier_description(tier),
-                    'target_time_ms': config['target_time_ms'],
-                    'max_resolution': config['max_size'],
-                    'quality_threshold': config['quality_threshold'],
-                    'image_enhancement': config['enhance_image']
+                    'target_time_ms': config.get('target_time_ms', 0),
+                    'max_resolution': config.get('max_size', 0),
+                    'quality_threshold': config.get('quality_threshold', 0),
+                    'image_enhancement': config.get('enhance_image', False)
                 }
                 for tier, config in self.tier_configs.items()
             }

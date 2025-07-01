@@ -104,11 +104,21 @@ class SimplifiedScanResponse(BaseModel):
     quality_score: float = Field(..., description="Image quality score (0-100)")
 
 
+class MatchScore(BaseModel):
+    """Detailed scoring information for a TCG match."""
+    card: PokemonCard = Field(..., description="The Pokemon card")
+    score: int = Field(..., description="Total match score")
+    score_breakdown: Dict[str, int] = Field(..., description="Detailed scoring breakdown")
+    confidence: str = Field(..., description="Confidence level (high/medium/low)")
+    reasoning: List[str] = Field(default_factory=list, description="Human-readable match reasoning")
+
+
 class ScanResponse(BaseModel):
     """Response model for card scanning."""
     success: bool = Field(..., description="Whether scan was successful")
     card_identification: Optional[GeminiAnalysis] = Field(None, description="Gemini's card analysis")
     tcg_matches: Optional[List[PokemonCard]] = Field(None, description="Matching cards from TCG API")
+    all_tcg_matches: Optional[List[MatchScore]] = Field(None, description="All TCG matches with detailed scoring")
     best_match: Optional[PokemonCard] = Field(None, description="Best matching card")
     processing: ProcessingInfo = Field(..., description="Processing details and quality metrics")
     cost_info: Optional[CostInfo] = Field(None, description="Cost tracking information")

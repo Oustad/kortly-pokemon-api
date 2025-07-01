@@ -19,6 +19,7 @@ from ..models.schemas import (
     CostInfo,
     ErrorResponse,
     GeminiAnalysis,
+    MatchScore,
     PokemonCard,
     ProcessingInfo,
     QualityFeedback,
@@ -95,8 +96,8 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     
     # Name matching (very high priority for exact matches)
     if gemini_params.get("name") and card_data.get("name"):
-        gemini_name = gemini_params["name"].lower().strip()
-        card_name = card_data["name"].lower().strip()
+        gemini_name = gemini_params.get("name", "").lower().strip()
+        card_name = card_data.get("name", "").lower().strip()
         
         # Exact name match gets highest priority
         if gemini_name == card_name:
@@ -112,8 +113,8 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     
     # Card number match (high priority) - exact match required
     if gemini_params.get("number") and card_data.get("number"):
-        gemini_number = str(gemini_params["number"]).strip()
-        card_number = str(card_data["number"]).strip()
+        gemini_number = str(gemini_params.get("number", "")).strip()
+        card_number = str(card_data.get("number", "")).strip()
         
         if gemini_number == card_number:
             score += 1000  # High score for exact number match
@@ -122,8 +123,8 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     
     # HP match (high priority)
     if gemini_params.get("hp") and card_data.get("hp"):
-        gemini_hp = str(gemini_params["hp"]).strip()
-        card_hp = str(card_data["hp"]).strip()
+        gemini_hp = str(gemini_params.get("hp", "")).strip()
+        card_hp = str(card_data.get("hp", "")).strip()
         
         if gemini_hp == card_hp:
             score += 400
@@ -138,8 +139,8 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     
     # Set name match (already handled by search, but good to verify)
     if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
-        gemini_set = gemini_params["set_name"].lower().strip()
-        card_set = card_data["set"]["name"].lower().strip()
+        gemini_set = gemini_params.get("set_name", "").lower().strip()
+        card_set = card_data.get("set", {}).get("name", "").lower().strip()
         
         if gemini_set == card_set:
             score += 200
@@ -153,47 +154,142 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
     return score
 
 
-def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dict[str, Any]) -> tuple[int, Dict[str, int]]:
     """
-    Select the best matching card from TCG results based on Gemini parameters.
+    Calculate match score with detailed breakdown for transparency.
+    
+    Returns:
+        Tuple of (total_score, score_breakdown_dict)
+    """
+    score_breakdown = {
+        "name_exact": 0,
+        "name_partial": 0,
+        "name_tag_team_penalty": 0,
+        "number_exact": 0,
+        "number_partial": 0,
+        "hp_match": 0,
+        "type_matches": 0,
+        "set_exact": 0,
+        "set_partial": 0,
+        "shiny_vault_bonus": 0,
+    }
+    
+    # Name matching (very high priority for exact matches)
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = gemini_params.get("name", "").lower().strip()
+        card_name = card_data.get("name", "").lower().strip()
+        
+        # Exact name match gets highest priority
+        if gemini_name == card_name:
+            score_breakdown["name_exact"] = 2000
+        # Penalize tag team cards when searching for single Pokemon
+        elif "&" in card_name and "&" not in gemini_name:
+            # Card is a tag team but search is for single Pokemon
+            if gemini_name in card_name:
+                score_breakdown["name_partial"] = 100
+                score_breakdown["name_tag_team_penalty"] = -100
+        # Normal partial matches
+        elif gemini_name in card_name or card_name in gemini_name:
+            score_breakdown["name_partial"] = 300
+    
+    # Card number match (high priority) - exact match required
+    if gemini_params.get("number") and card_data.get("number"):
+        gemini_number = str(gemini_params.get("number", "")).strip()
+        card_number = str(card_data.get("number", "")).strip()
+        
+        if gemini_number == card_number:
+            score_breakdown["number_exact"] = 1000
+        elif gemini_number in card_number or card_number in gemini_number:
+            score_breakdown["number_partial"] = 500
+    
+    # HP match (high priority)
+    if gemini_params.get("hp") and card_data.get("hp"):
+        gemini_hp = str(gemini_params.get("hp", "")).strip()
+        card_hp = str(card_data.get("hp", "")).strip()
+        
+        if gemini_hp == card_hp:
+            score_breakdown["hp_match"] = 400
+    
+    # Types match (medium priority)
+    card_types = card_data.get("types", [])
+    gemini_types = gemini_params.get("types", [])
+    if gemini_types and card_types:
+        # Count matching types
+        matching_types = len([t for t in gemini_types if t in card_types])
+        score_breakdown["type_matches"] = matching_types * 100
+    
+    # Set name match
+    if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
+        gemini_set = gemini_params.get("set_name", "").lower().strip()
+        card_set = card_data.get("set", {}).get("name", "").lower().strip()
+        
+        if gemini_set == card_set:
+            score_breakdown["set_exact"] = 200
+        elif gemini_set in card_set or card_set in gemini_set:
+            score_breakdown["set_partial"] = 100
+    
+    # Special case: Shiny Vault cards
+    if card_data.get("number", "").startswith("SV") and gemini_params.get("set_name") == "Hidden Fates":
+        score_breakdown["shiny_vault_bonus"] = 300
+    
+    total_score = sum(score_breakdown.values())
+    return total_score, score_breakdown
+
+
+def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str, Any]) -> tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Select the best matching card from TCG results and return all scored matches.
     
     Args:
         tcg_results: List of card data from TCG API
         gemini_params: Parsed parameters from Gemini
         
     Returns:
-        Best matching card data or None
+        Tuple of (best_match_data, all_scored_matches)
     """
     if not tcg_results:
-        return None
+        return None, []
     
     best_score = -1
     best_match = None
-    match_details = []
+    all_scored_matches = []
     
     for card_data in tcg_results:
-        score = calculate_match_score(card_data, gemini_params)
-        match_details.append({
+        score, score_breakdown = calculate_match_score_detailed(card_data, gemini_params)
+        
+        match_info = {
+            "card_data": card_data,
+            "score": score,
+            "score_breakdown": score_breakdown,
             "card_id": card_data.get("id"),
             "card_name": card_data.get("name"),
             "card_number": card_data.get("number"),
             "card_hp": card_data.get("hp"),
-            "score": score,
-        })
+            "set_name": card_data.get("set", {}).get("name"),
+            "types": card_data.get("types", []),
+            "rarity": card_data.get("rarity"),
+        }
+        all_scored_matches.append(match_info)
         
         if score > best_score:
             best_score = score
             best_match = card_data
     
+    # Sort all matches by score (highest first)
+    all_scored_matches.sort(key=lambda x: x["score"], reverse=True)
+    
     # Log the scoring details for debugging
-    logger.info(f"🎯 Best match scoring:")
-    for details in sorted(match_details, key=lambda x: x["score"], reverse=True):
-        logger.info(f"   {details['card_name']} #{details['card_number']} (ID: {details['card_id']}) - Score: {details['score']}")
+    logger.info(f"🎯 Match scoring (showing top 5):")
+    for i, match in enumerate(all_scored_matches[:5]):
+        logger.info(f"   {i+1}. {match.get('card_name', 'Unknown')} #{match.get('card_number', '?')} - Score: {match['score']}")
+        if match['score_breakdown']:
+            breakdown_str = ", ".join([f"{k}: {v}" for k, v in match['score_breakdown'].items() if v > 0])
+            logger.info(f"      Breakdown: {breakdown_str}")
     
     if best_match:
         logger.info(f"✅ Selected best match: {best_match.get('name')} #{best_match.get('number')} (Score: {best_score})")
     
-    return best_match
+    return best_match, all_scored_matches
 
 
 def create_simplified_response(
@@ -315,8 +411,8 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             
             # Extract card type information (with fallback defaults)
             card_type_info = {}
-            if 'card_type' in search_params and search_params['card_type']:
-                card_type = str(search_params['card_type']).strip().lower()
+            if 'card_type' in search_params and search_params.get('card_type'):
+                card_type = str(search_params.get('card_type', '')).strip().lower()
                 # Validate card type
                 valid_types = ['pokemon_front', 'pokemon_back', 'non_pokemon', 'unknown']
                 if card_type in valid_types:
@@ -328,7 +424,7 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             
             # Extract is_pokemon_card flag
             if 'is_pokemon_card' in search_params:
-                is_pokemon = search_params['is_pokemon_card']
+                is_pokemon = search_params.get('is_pokemon_card')
                 if isinstance(is_pokemon, bool):
                     card_type_info['is_pokemon_card'] = is_pokemon
                 elif isinstance(is_pokemon, str):
@@ -339,8 +435,8 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                 card_type_info['is_pokemon_card'] = card_type_info['card_type'] in ['pokemon_front', 'pokemon_back']
             
             # Extract card side
-            if 'card_side' in search_params and search_params['card_side']:
-                card_side = str(search_params['card_side']).strip().lower()
+            if 'card_side' in search_params and search_params.get('card_side'):
+                card_side = str(search_params.get('card_side', '')).strip().lower()
                 valid_sides = ['front', 'back', 'unknown']
                 if card_side in valid_sides:
                     card_type_info['card_side'] = card_side
@@ -611,6 +707,7 @@ async def scan_pokemon_card(request: ScanRequest):
         tcg_matches = []
         search_attempts = []
         best_match_card = None
+        all_match_scores = []  # Initialize here so it's always available
         
         if parsed_data.get("name"):
             # Strategy 1: Try exact match with all parameters
@@ -728,9 +825,70 @@ async def scan_pokemon_card(request: ScanRequest):
                     market_prices=card_data.get("tcgplayer", {}).get("prices") if card_data.get("tcgplayer") else None,
                 ))
             
-            # Select the best match using intelligent scoring
-            best_match_data = select_best_match(tcg_card_data, parsed_data)
+            # Select the best match using intelligent scoring and get all matches
+            best_match_data, all_scored_matches = select_best_match(tcg_card_data, parsed_data)
             best_match_card = None
+            logger.info(f"📊 Processing {len(all_scored_matches)} scored matches for detailed response")
+            
+            # Process all scored matches
+            for match_info in all_scored_matches:
+                # Create PokemonCard object for this match
+                card_data = match_info["card_data"]
+                pokemon_card = PokemonCard(
+                    id=card_data["id"],
+                    name=card_data["name"],
+                    set_name=card_data.get("set", {}).get("name"),
+                    number=card_data.get("number"),
+                    types=card_data.get("types"),
+                    hp=card_data.get("hp"),
+                    rarity=card_data.get("rarity"),
+                    images=card_data.get("images"),
+                    market_prices=card_data.get("tcgplayer", {}).get("prices") if card_data.get("tcgplayer") else None,
+                )
+                
+                # Determine confidence level
+                score = match_info["score"]
+                if score >= 1500:
+                    confidence = "high"
+                elif score >= 500:
+                    confidence = "medium"
+                else:
+                    confidence = "low"
+                
+                # Generate human-readable reasoning
+                reasoning = []
+                breakdown = match_info["score_breakdown"]
+                if breakdown.get("name_exact"):
+                    reasoning.append(f"Exact name match (+{breakdown['name_exact']})")
+                elif breakdown.get("name_partial"):
+                    reasoning.append(f"Partial name match (+{breakdown['name_partial']})")
+                if breakdown.get("number_exact"):
+                    reasoning.append(f"Exact number match (+{breakdown['number_exact']})")
+                elif breakdown.get("number_partial"):
+                    reasoning.append(f"Partial number match (+{breakdown['number_partial']})")
+                if breakdown.get("hp_match"):
+                    reasoning.append(f"HP match (+{breakdown['hp_match']})")
+                if breakdown.get("type_matches"):
+                    reasoning.append(f"Type matches (+{breakdown['type_matches']})")
+                if breakdown.get("set_exact"):
+                    reasoning.append(f"Exact set match (+{breakdown['set_exact']})")
+                elif breakdown.get("set_partial"):
+                    reasoning.append(f"Partial set match (+{breakdown['set_partial']})")
+                if breakdown.get("shiny_vault_bonus"):
+                    reasoning.append(f"Shiny Vault bonus (+{breakdown['shiny_vault_bonus']})")
+                if breakdown.get("name_tag_team_penalty"):
+                    reasoning.append(f"Tag team penalty ({breakdown['name_tag_team_penalty']})")
+                
+                match_score = MatchScore(
+                    card=pokemon_card,
+                    score=score,
+                    score_breakdown=breakdown,
+                    confidence=confidence,
+                    reasoning=reasoning
+                )
+                all_match_scores.append(match_score)
+            
+            # Find best match card
             if best_match_data:
                 # Find the corresponding PokemonCard object
                 for card in tcg_matches:
@@ -741,6 +899,8 @@ async def scan_pokemon_card(request: ScanRequest):
             # Track TCG usage
             if request.options.include_cost_tracking and config.enable_cost_tracking:
                 cost_tracker.track_tcg_usage("search")
+        else:
+            logger.info("⚠️ TCG search skipped - no Pokemon name identified")
         
         tcg_time = (time.time() - tcg_start) * 1000
         
@@ -848,11 +1008,14 @@ async def scan_pokemon_card(request: ScanRequest):
             success=scan_success,
             card_identification=gemini_analysis,
             tcg_matches=tcg_matches if tcg_matches else None,
+            all_tcg_matches=all_match_scores if all_match_scores else None,
             best_match=best_match_card,
             processing=processing_info,
             cost_info=cost_info,
             error=error_message,
         )
+        
+        logger.info(f"🔍 Response prepared: tcg_matches={len(tcg_matches) if tcg_matches else 0}, all_tcg_matches={len(all_match_scores) if all_match_scores else 0}")
         
         total_time = processing_info.actual_time_ms
         logger.info(

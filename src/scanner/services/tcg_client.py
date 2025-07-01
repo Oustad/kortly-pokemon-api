@@ -170,8 +170,8 @@ class PokemonTcgClient:
         """Retrieve data from cache if available and not expired."""
         if cache_key in self.cache:
             entry = self.cache[cache_key]
-            if entry["expires_at"] > time.time():
-                return entry["data"]
+            if entry.get("expires_at", 0) > time.time():
+                return entry.get("data")
             else:
                 # Expired, remove from cache
                 del self.cache[cache_key]

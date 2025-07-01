@@ -7,11 +7,17 @@ set -euo pipefail
 
 # Configuration
 PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-}"
-REGION="${CLOUD_RUN_REGION:-us-central1}"
+REGION="${CLOUD_RUN_REGION:-europe-west1}"  # Changed default to europe-west1 for better EU performance
 SERVICE_NAME="${CLOUD_RUN_SERVICE:-pokemon-scanner-test}"
 IMAGE_NAME="pokemon-card-scanner"
 REPOSITORY="${ARTIFACT_REGISTRY_REPO:-pokemon-scanner}"
 USE_CLOUD_BUILD=false
+# Performance settings
+CPU="${CLOUD_RUN_CPU:-2}"
+MEMORY="${CLOUD_RUN_MEMORY:-4Gi}"
+MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-1}"
+MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+MAX_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-1}"  # Set to 1 for AI workloads
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -200,12 +206,12 @@ deploy_to_cloud_run() {
         --region="$REGION" \
         --allow-unauthenticated \
         --port=80 \
-        --memory=1Gi \
-        --cpu=1 \
+        --memory="$MEMORY" \
+        --cpu="$CPU" \
         --timeout=300 \
-        --concurrency=10 \
-        --min-instances=0 \
-        --max-instances=3 \
+        --concurrency="$MAX_CONCURRENCY" \
+        --min-instances="$MIN_INSTANCES" \
+        --max-instances="$MAX_INSTANCES" \
         --set-env-vars="ENVIRONMENT=test,DEBUG=false,LOG_LEVEL=INFO,SERVE_STATIC_FILES=true,ENABLE_API_DOCS=true" \
         --set-secrets="GOOGLE_API_KEY=GOOGLE_API_KEY:latest,POKEMON_TCG_API_KEY=POKEMON_TCG_API_KEY:latest"
     
@@ -244,6 +250,12 @@ main() {
     echo_info "Project: $PROJECT_ID"
     echo_info "Region: $REGION"
     echo_info "Service: $SERVICE_NAME"
+    echo_info "Performance Configuration:"
+    echo_info "  CPU: $CPU"
+    echo_info "  Memory: $MEMORY"
+    echo_info "  Min Instances: $MIN_INSTANCES (reduces cold starts)"
+    echo_info "  Max Instances: $MAX_INSTANCES"
+    echo_info "  Max Concurrency: $MAX_CONCURRENCY (per instance)"
     if [[ "$USE_CLOUD_BUILD" == "true" ]]; then
         echo_info "Build method: Google Cloud Build (forced)"
     else
