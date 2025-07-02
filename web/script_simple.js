@@ -189,8 +189,7 @@ async function scanCard() {
                 include_cost_tracking: true,  // Default to tracking costs
                 retry_on_truncation: true,
                 prefer_speed: false,
-                max_processing_time: null,  // No time limit for better results
-                response_format: "detailed"  // Get detailed response with all matches
+                max_processing_time: null  // No time limit for better results
             }
         };
         
@@ -246,23 +245,15 @@ function displayResults(data) {
     // Store the response data globally for JSON view
     window.lastScanResult = data;
     
-    // Debug logging
-    console.log('Received scan data:', data);
-    console.log('Has all_tcg_matches:', !!data.all_tcg_matches);
-    console.log('All TCG matches count:', data.all_tcg_matches?.length || 0);
-    console.log('Regular TCG matches count:', data.tcg_matches?.length || 0);
-    
     hideAllSections();
     document.getElementById('resultsSection').style.display = 'block';
     
     // Check if we have a simplified response
     if (data.name && !data.card_identification) {
         // Simplified response
-        console.log('Using simplified response display');
         displaySimplifiedResults(data);
     } else {
         // Detailed response (legacy)
-        console.log('Using detailed response display');
         displayDetailedResults(data);
     }
 }
@@ -372,8 +363,8 @@ function displayDetailedResults(data) {
     // Display Gemini identification
     displayIdentification(data.card_identification);
     
-    // Display TCG matches (with new detailed scoring if available)
-    displayMatches(data.tcg_matches, data.best_match, data.all_tcg_matches);
+    // Display TCG matches
+    displayMatches(data.tcg_matches, data.best_match);
 }
 
 function displayUploadedImage() {
@@ -751,424 +742,455 @@ function getPerformanceColor(rating) {
     }
 }
 
-function displayIdentification(identification) {
-    if (!identification) return;
+function displayIdentification(cardId) {
+    if (!cardId) return;
     
     const geminiResult = document.getElementById('geminiResult');
-    geminiResult.innerHTML = ''; // Clear previous content
+    const geminiData = cardId.structured_data;
     
-    // Language detection info (new!)
-    if (identification.language_info) {
-        const langInfo = identification.language_info;
-        const languageNames = {
-            'en': 'English',
-            'fr': 'French',
-            'ja': 'Japanese',
-            'de': 'German',
-            'es': 'Spanish',
-            'it': 'Italian',
-            'pt': 'Portuguese',
-            'ko': 'Korean',
-            'zh': 'Chinese'
-        };
+    let identificationHtml = '';
+    
+    // Card type info with appropriate styling
+    if (cardId.card_type_info) {
+        const typeInfo = cardId.card_type_info;
+        const cardTypeClass = getCardTypeClass(typeInfo.card_type);
         
-        const languageName = languageNames[langInfo.detected_language] || langInfo.detected_language.toUpperCase();
-        const isNonEnglish = langInfo.detected_language !== 'en';
-        
-        const languageDiv = document.createElement('div');
-        languageDiv.className = 'language-info';
-        languageDiv.innerHTML = `
-            <div class="language-detection" style="background: ${isNonEnglish ? '#fef3c7' : 'var(--bg-secondary)'}; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${isNonEnglish ? '#f59e0b' : '#10b981'};">
-                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary-color);">🌍 Language Detection</h4>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
-                    <div>
-                        <div style="font-weight: bold; color: ${isNonEnglish ? '#d97706' : '#059669'};">${languageName}</div>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Detected Language</div>
-                    </div>
-                    ${langInfo.original_name ? `
-                    <div>
-                        <div style="font-weight: bold;">${langInfo.original_name}</div>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Original Name</div>
-                    </div>
-                    ` : ''}
-                    ${langInfo.is_translation ? `
-                    <div>
-                        <div style="font-weight: bold; color: #3b82f6;">${langInfo.translated_name}</div>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary);">English Translation</div>
-                    </div>
-                    ` : ''}
-                </div>
-                ${langInfo.is_translation ? `
-                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px; font-size: 0.9rem;">
-                    <strong>📝 Note:</strong> ${langInfo.translation_note || 'Card name was translated for database search'}
-                </div>
-                ` : ''}
-                ${isNonEnglish && !langInfo.is_translation ? `
-                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 0.9rem;">
-                    <strong>⚠️ Notice:</strong> Non-English card detected - showing English equivalent pricing data
-                </div>
-                ` : ''}
-            </div>
-        `;
-        geminiResult.appendChild(languageDiv);
-    }
-
-    // Token usage details
-    if (identification.tokens_used) {
-        const tokens = identification.tokens_used;
-        const totalTokens = (tokens.prompt || 0) + (tokens.response || 0);
-        
-        const tokenInfo = document.createElement('div');
-        tokenInfo.className = 'token-info';
-        tokenInfo.innerHTML = `
-            <div class="token-breakdown" style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary-color);">🎯 Token Usage</h4>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6;">${tokens.prompt || 0}</div>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Prompt Tokens</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6;">${tokens.response || 0}</div>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Response Tokens</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6;">${totalTokens}</div>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Total Tokens</div>
-                    </div>
+        identificationHtml += `
+            <div class="card-type-section">
+                <div class="card-type ${cardTypeClass}">
+                    <span class="type-icon">${getCardTypeIcon(typeInfo.card_type)}</span>
+                    <span class="type-label">${formatCardType(typeInfo.card_type)}</span>
                 </div>
             </div>
         `;
-        geminiResult.appendChild(tokenInfo);
     }
     
-    // Show raw response
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'gemini-content';
-    contentDiv.textContent = identification.raw_response;
-    geminiResult.appendChild(contentDiv);
-    
-    // Show extracted data if available
-    if (identification.structured_data && Object.keys(identification.structured_data).length > 0) {
-        const extractedDiv = document.createElement('div');
-        extractedDiv.className = 'extracted-data';
-        extractedDiv.innerHTML = '<h4>📋 Extracted Information</h4>';
+    // Basic identification
+    if (geminiData) {
+        identificationHtml += '<div class="identification-grid">';
         
-        const dataGrid = document.createElement('div');
-        dataGrid.className = 'data-grid';
-        
-        const data = identification.structured_data;
-        if (data.name) {
-            dataGrid.innerHTML += createDataItem('Name', data.name);
+        if (geminiData.name) {
+            identificationHtml += `<div class="id-item"><strong>Name:</strong> ${geminiData.name}</div>`;
         }
-        if (data.set_name) {
-            dataGrid.innerHTML += createDataItem('Set', data.set_name);
+        if (geminiData.set_name) {
+            identificationHtml += `<div class="id-item"><strong>Set:</strong> ${geminiData.set_name}</div>`;
         }
-        if (data.number) {
-            dataGrid.innerHTML += createDataItem('Number', data.number);
+        if (geminiData.number) {
+            identificationHtml += `<div class="id-item"><strong>Number:</strong> ${geminiData.number}</div>`;
         }
-        if (data.hp) {
-            dataGrid.innerHTML += createDataItem('HP', data.hp);
+        if (geminiData.hp) {
+            identificationHtml += `<div class="id-item"><strong>HP:</strong> ${geminiData.hp}</div>`;
         }
-        if (data.types && data.types.length > 0) {
-            dataGrid.innerHTML += createDataItem('Types', data.types.join(', '));
+        if (geminiData.types && geminiData.types.length > 0) {
+            identificationHtml += `<div class="id-item"><strong>Types:</strong> ${geminiData.types.join(', ')}</div>`;
+        }
+        if (geminiData.rarity) {
+            identificationHtml += `<div class="id-item"><strong>Rarity:</strong> ${geminiData.rarity}</div>`;
         }
         
-        extractedDiv.appendChild(dataGrid);
-        geminiResult.appendChild(extractedDiv);
+        identificationHtml += '</div>';
     }
-}
-
-function createDataItem(label, value) {
-    return `
-        <div class="data-item">
-            <span class="data-label">${label}:</span>
-            <span>${value}</span>
-        </div>
+    
+    // Language info
+    if (cardId.language_info) {
+        const langInfo = cardId.language_info;
+        identificationHtml += '<div class="language-section">';
+        identificationHtml += `<h4>🌍 Language Information</h4>`;
+        identificationHtml += `<div class="language-details">`;
+        identificationHtml += `<div><strong>Detected Language:</strong> ${langInfo.detected_language}</div>`;
+        if (langInfo.original_name) {
+            identificationHtml += `<div><strong>Original Name:</strong> ${langInfo.original_name}</div>`;
+        }
+        if (langInfo.is_translation && langInfo.translated_name) {
+            identificationHtml += `<div><strong>English Translation:</strong> ${langInfo.translated_name}</div>`;
+        }
+        identificationHtml += '</div></div>';
+    }
+    
+    // Confidence and token info
+    const metaInfo = [];
+    if (cardId.confidence) {
+        metaInfo.push(`Confidence: ${Math.round(cardId.confidence * 100)}%`);
+    }
+    if (cardId.tokens_used) {
+        const totalTokens = (cardId.tokens_used.prompt || 0) + (cardId.tokens_used.response || 0);
+        metaInfo.push(`Tokens: ${totalTokens}`);
+    }
+    
+    if (metaInfo.length > 0) {
+        identificationHtml += `<div class="meta-info">${metaInfo.join(' • ')}</div>`;
+    }
+    
+    // Raw response toggle
+    identificationHtml += `
+        <details class="raw-response">
+            <summary>🔍 View Raw AI Response</summary>
+            <pre class="raw-text">${cardId.raw_response || 'No raw response available'}</pre>
+        </details>
     `;
+    
+    geminiResult.innerHTML = identificationHtml;
 }
 
-function displayMatches(matches, bestMatch, allScoredMatches) {
+function getCardTypeClass(cardType) {
+    switch (cardType) {
+        case 'pokemon_front': return 'type-pokemon-front';
+        case 'pokemon_back': return 'type-pokemon-back';
+        case 'non_pokemon': return 'type-non-pokemon';
+        default: return 'type-unknown';
+    }
+}
+
+function getCardTypeIcon(cardType) {
+    switch (cardType) {
+        case 'pokemon_front': return '🎴';
+        case 'pokemon_back': return '🔄';
+        case 'non_pokemon': return '❓';
+        default: return '❔';
+    }
+}
+
+function formatCardType(cardType) {
+    switch (cardType) {
+        case 'pokemon_front': return 'Pokemon Card (Front)';
+        case 'pokemon_back': return 'Pokemon Card (Back)';
+        case 'non_pokemon': return 'Non-Pokemon Card';
+        default: return 'Unknown Card Type';
+    }
+}
+
+function displayMatches(tcgMatches, bestMatch) {
     const matchesDiv = document.getElementById('tcgMatches');
-    matchesDiv.innerHTML = '';
     
-    // Debug logging
-    console.log('displayMatches called with:');
-    console.log('- matches:', matches?.length || 0, 'items');
-    console.log('- bestMatch:', bestMatch?.name || 'none');
-    console.log('- allScoredMatches:', allScoredMatches?.length || 0, 'items');
-    
-    // Use detailed scored matches if available, otherwise fall back to regular matches
-    const matchesToDisplay = allScoredMatches || matches;
-    
-    if (!matchesToDisplay || matchesToDisplay.length === 0) {
-        matchesDiv.innerHTML = '<p style="color: var(--text-secondary);">No matches found in the Pokemon TCG database.</p>';
+    if (!tcgMatches || tcgMatches.length === 0) {
+        matchesDiv.innerHTML = '<p>No matching cards found in database.</p>';
         return;
     }
     
-    // Add header with toggle for showing all matches
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'matches-header';
-    headerDiv.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <div>
-                <span style="font-weight: bold;">Found ${matchesToDisplay.length} potential matches</span>
-                ${allScoredMatches ? '<span style="color: var(--text-secondary); font-size: 0.9rem; margin-left: 0.5rem;">(with scoring details)</span>' : ''}
+    let matchesHtml = '';
+    
+    // Show best match prominently if available
+    if (bestMatch) {
+        matchesHtml += `
+            <div class="best-match-section">
+                <h4>🏆 Best Match</h4>
+                ${createCardDisplay(bestMatch, true)}
             </div>
-            ${matchesToDisplay.length > 3 ? `
-                <button class="btn-secondary btn-sm" onclick="toggleAllMatches()" id="toggleMatchesBtn">
-                    Show All Matches
-                </button>
-            ` : ''}
-        </div>
-    `;
-    matchesDiv.appendChild(headerDiv);
-    
-    // Display matches container
-    const matchesContainer = document.createElement('div');
-    matchesContainer.id = 'matchesContainer';
-    matchesDiv.appendChild(matchesContainer);
-    
-    // Display initial matches (top 3)
-    displayMatchesSet(matchesToDisplay, bestMatch, matchesContainer, 3);
-}
-
-function displayMatchesSet(matchesToDisplay, bestMatch, container, limit) {
-    container.innerHTML = '';
-    
-    const matchesToShow = limit ? matchesToDisplay.slice(0, limit) : matchesToDisplay;
-    
-    matchesToShow.forEach((matchItem, index) => {
-        const isScored = matchItem.card && matchItem.score !== undefined;
-        const card = isScored ? matchItem.card : matchItem;
-        const isBestMatch = bestMatch && card.id === bestMatch.id;
-        
-        const matchCard = createMatchCard(card, isBestMatch, isScored ? matchItem : null, index + 1);
-        container.appendChild(matchCard);
-    });
-}
-
-function toggleAllMatches() {
-    const container = document.getElementById('matchesContainer');
-    const button = document.getElementById('toggleMatchesBtn');
-    const allMatches = window.lastScanResult?.all_tcg_matches || window.lastScanResult?.tcg_matches || [];
-    const bestMatch = window.lastScanResult?.best_match;
-    
-    if (button.textContent === 'Show All Matches') {
-        displayMatchesSet(allMatches, bestMatch, container);
-        button.textContent = 'Show Top 3';
-    } else {
-        displayMatchesSet(allMatches, bestMatch, container, 3);
-        button.textContent = 'Show All Matches';
+        `;
     }
+    
+    // Show all matches
+    matchesHtml += '<div class="all-matches-section">';
+    matchesHtml += `<h4>📋 All Matches (${tcgMatches.length})</h4>`;
+    
+    tcgMatches.forEach((card, index) => {
+        const isBest = bestMatch && card.id === bestMatch.id;
+        matchesHtml += createCardDisplay(card, isBest, index + 1);
+    });
+    
+    matchesHtml += '</div>';
+    
+    matchesDiv.innerHTML = matchesHtml;
 }
 
-function createMatchCard(card, isBestMatch, scoredMatch, rank) {
-    const div = document.createElement('div');
-    div.className = 'match-card' + (isBestMatch ? ' best-match' : '');
+function createCardDisplay(card, isBest = false, rank = null) {
+    const cardClass = isBest ? 'card-match best-match' : 'card-match';
+    const rankLabel = rank ? `#${rank}` : '';
+    const bestLabel = isBest ? '🏆 Best Match' : '';
     
-    const imageHtml = card.images?.small ? 
-        `<div class="match-image">
-            <img src="${card.images.small}" alt="${card.name}" loading="lazy">
-        </div>` : '';
-    
-    const priceHtml = card.market_prices ? 
-        `<div class="match-price">
-            <strong>Market Price:</strong> ${formatPrices(card.market_prices)}
-        </div>` : '';
-    
-    // Scoring information if available
-    let scoringHtml = '';
-    if (scoredMatch) {
-        const confidenceColor = {
-            'high': '#10b981',
-            'medium': '#f59e0b', 
-            'low': '#ef4444'
-        }[scoredMatch.confidence] || '#6b7280';
-        
-        scoringHtml = `
-            <div class="match-scoring" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 6px; border-left: 4px solid ${confidenceColor};">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <span style="font-weight: bold; color: ${confidenceColor};">Match Score: ${scoredMatch.score}</span>
-                    <span style="font-size: 0.9rem; color: ${confidenceColor};">${scoredMatch.confidence.toUpperCase()} confidence</span>
+    let cardHtml = `
+        <div class="${cardClass}">
+            <div class="card-header">
+                <div class="card-title">
+                    <h5>${card.name}</h5>
+                    <span class="match-labels">${bestLabel} ${rankLabel}</span>
                 </div>
-                ${scoredMatch.reasoning && scoredMatch.reasoning.length > 0 ? `
-                    <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                        <strong>Why this match:</strong>
-                        <ul style="margin: 0.25rem 0 0 1rem; padding: 0;">
-                            ${scoredMatch.reasoning.map(reason => `<li>${reason}</li>`).join('')}
-                        </ul>
+            </div>
+            <div class="card-body">
+    `;
+    
+    // Card image
+    if (card.images && (card.images.large || card.images.small)) {
+        const imageUrl = card.images.large || card.images.small;
+        cardHtml += `
+            <div class="card-image-container">
+                <img src="${imageUrl}" alt="${card.name}" class="card-image" loading="lazy">
+            </div>
+        `;
+    }
+    
+    // Card details
+    cardHtml += '<div class="card-details">';
+    
+    if (card.set_name) cardHtml += `<div class="detail-row"><strong>Set:</strong> ${card.set_name}</div>`;
+    if (card.number) cardHtml += `<div class="detail-row"><strong>Number:</strong> ${card.number}</div>`;
+    if (card.hp) cardHtml += `<div class="detail-row"><strong>HP:</strong> ${card.hp}</div>`;
+    if (card.types && card.types.length > 0) cardHtml += `<div class="detail-row"><strong>Types:</strong> ${card.types.join(', ')}</div>`;
+    if (card.rarity) cardHtml += `<div class="detail-row"><strong>Rarity:</strong> ${card.rarity}</div>`;
+    
+    // Market prices
+    if (card.market_prices) {
+        cardHtml += '<div class="price-section">';
+        cardHtml += '<strong>Market Prices:</strong>';
+        cardHtml += '<div class="price-grid">';
+        
+        // Handle different price structures from TCG API
+        let priceData = card.market_prices;
+        
+        // Check for variants (normal, holofoil, etc.)
+        if (priceData.normal || priceData.holofoil || priceData.reverseHolofoil) {
+            // Use the first available variant
+            priceData = priceData.normal || priceData.holofoil || priceData.reverseHolofoil || priceData;
+        }
+        
+        if (priceData.low !== undefined) cardHtml += `<span class="price-item">Low: $${priceData.low}</span>`;
+        if (priceData.mid !== undefined) cardHtml += `<span class="price-item">Mid: $${priceData.mid}</span>`;
+        if (priceData.high !== undefined) cardHtml += `<span class="price-item">High: $${priceData.high}</span>`;
+        if (priceData.market !== undefined) cardHtml += `<span class="price-item market-price">Market: $${priceData.market}</span>`;
+        
+        cardHtml += '</div></div>';
+    }
+    
+    cardHtml += '</div>'; // card-details
+    cardHtml += '</div>'; // card-body
+    cardHtml += '</div>'; // card-match
+    
+    return cardHtml;
+}
+
+// Error handling
+function showError(message) {
+    hideAllSections();
+    document.getElementById('errorSection').style.display = 'block';
+    document.getElementById('errorMessage').textContent = message;
+}
+
+function showEnhancedError(errorDetail) {
+    hideAllSections();
+    document.getElementById('errorSection').style.display = 'block';
+    
+    // Store the error data globally for JSON view
+    window.lastErrorResult = errorDetail;
+    
+    // Build enhanced error display
+    let errorHtml = `
+        <div class="error-header">
+            <h3>❌ ${getErrorIcon(errorDetail.error_type)} Error</h3>
+            <button class="btn-json-error" onclick="toggleErrorJsonView()">View Details</button>
+        </div>
+        <div class="error-content" id="errorContent">
+    `;
+    
+    // Main error message
+    let mainMessage = errorDetail.message || errorDetail.error || 'An unknown error occurred';
+    errorHtml += `<div class="error-main-message">${mainMessage}</div>`;
+    
+    // Add specific details for different error types
+    if (errorDetail.error_type === 'card_not_found' && errorDetail.details) {
+        errorHtml += `
+            <div class="error-details">
+                <h4>📊 Matching Details</h4>
+                <div class="score-info">
+                    <div class="score-item">
+                        <span class="score-label">Best Match Score:</span>
+                        <span class="score-value">${errorDetail.details.highest_score}</span>
                     </div>
-                ` : ''}
-                <button class="btn-sm" onclick="toggleScoreBreakdown('${card.id}')" style="margin-top: 0.5rem; font-size: 0.8rem;">
-                    Show Score Breakdown
-                </button>
-                <div id="breakdown-${card.id}" style="display: none; margin-top: 0.5rem; font-size: 0.8rem;">
-                    ${formatScoreBreakdown(scoredMatch.score_breakdown)}
+                    <div class="score-item">
+                        <span class="score-label">Required Score:</span>
+                        <span class="score-value">${errorDetail.details.required_score}</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-label">Gap:</span>
+                        <span class="score-value">${errorDetail.details.score_gap} points short</span>
+                    </div>
                 </div>
             </div>
         `;
     }
     
-    div.innerHTML = `
-        ${rank ? `<div class="match-rank" style="position: absolute; top: 0.5rem; left: 0.5rem; background: var(--primary-color); color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold;">${rank}</div>` : ''}
-        ${imageHtml}
-        <div class="match-info">
-            <div class="match-name">${card.name} ${isBestMatch ? '⭐' : ''}</div>
-            <div class="match-meta">
-                <strong>Set:</strong> ${card.set_name || 'Unknown'} | 
-                <strong>Number:</strong> ${card.number || 'N/A'}
+    // Quality feedback for image quality errors
+    if (errorDetail.quality_feedback) {
+        const feedback = errorDetail.quality_feedback;
+        errorHtml += `
+            <div class="error-quality-feedback">
+                <h4>🎯 Image Quality Assessment</h4>
+                <div class="quality-status">Overall Quality: <strong>${feedback.overall}</strong></div>
+        `;
+        
+        if (feedback.issues && feedback.issues.length > 0) {
+            errorHtml += `
+                <div class="quality-issues">
+                    <h5>⚠️ Issues Found:</h5>
+                    <ul>
+                        ${feedback.issues.map(issue => `<li>${issue}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        if (feedback.suggestions && feedback.suggestions.length > 0) {
+            errorHtml += `
+                <div class="quality-suggestions">
+                    <h5>💡 Suggestions:</h5>
+                    <ul>
+                        ${feedback.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        errorHtml += `</div>`;
+    }
+    
+    // General suggestions
+    if (errorDetail.suggestions && errorDetail.suggestions.length > 0) {
+        errorHtml += `
+            <div class="error-suggestions">
+                <h4>💡 How to Fix This</h4>
+                <ul>
+                    ${errorDetail.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
+                </ul>
             </div>
-            <div class="match-meta">
-                <strong>HP:</strong> ${card.hp || 'N/A'} | 
-                <strong>Types:</strong> ${card.types ? card.types.join(', ') : 'N/A'}
-            </div>
-            <div class="match-meta">
-                <strong>Rarity:</strong> ${card.rarity || 'Unknown'}
-            </div>
-            ${priceHtml}
-            ${scoringHtml}
+        `;
+    }
+    
+    errorHtml += `
+        </div>
+        <div class="error-json-view" id="errorJsonView" style="display: none;">
+            <h4>🔍 Raw Error Data</h4>
+            <pre>${JSON.stringify(errorDetail, null, 2)}</pre>
+        </div>
+        <div class="error-actions">
+            <button class="btn-secondary" onclick="resetUpload()">
+                Try Another Image
+            </button>
         </div>
     `;
     
-    // Make the card position relative for the rank number
-    if (rank) {
-        div.style.position = 'relative';
-    }
-    
-    return div;
+    document.getElementById('errorMessage').innerHTML = errorHtml;
 }
 
-function formatPrices(prices) {
-    if (!prices) return 'N/A';
-    
-    const parts = [];
-    if (prices.normal) {
-        parts.push(`Normal: $${prices.normal.market || prices.normal.mid || 'N/A'}`);
+function getErrorIcon(errorType) {
+    switch (errorType) {
+        case 'card_not_found': return '🔍';
+        case 'not_pokemon_card': return '❓';
+        case 'pokemon_card_back': return '🔄';
+        case 'image_quality': return '🎯';
+        default: return '⚠️';
     }
-    if (prices.holofoil) {
-        parts.push(`Holo: $${prices.holofoil.market || prices.holofoil.mid || 'N/A'}`);
-    }
-    
-    return parts.join(' | ') || 'N/A';
 }
 
-function formatScoreBreakdown(breakdown) {
-    if (!breakdown) return 'No breakdown available';
+function toggleErrorJsonView() {
+    const jsonView = document.getElementById('errorJsonView');
+    const errorContent = document.getElementById('errorContent');
+    const button = document.querySelector('.btn-json-error');
     
-    const items = [];
-    for (const [key, value] of Object.entries(breakdown)) {
-        if (value !== 0) {
-            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            const sign = value > 0 ? '+' : '';
-            const color = value > 0 ? '#10b981' : '#ef4444';
-            items.push(`<span style="color: ${color};">${label}: ${sign}${value}</span>`);
-        }
-    }
-    
-    return items.length > 0 ? items.join('<br>') : 'No score components';
-}
-
-function toggleScoreBreakdown(cardId) {
-    const breakdown = document.getElementById(`breakdown-${cardId}`);
-    const button = event.target;
-    
-    if (breakdown.style.display === 'none') {
-        breakdown.style.display = 'block';
-        button.textContent = 'Hide Score Breakdown';
+    if (jsonView.style.display === 'none') {
+        jsonView.style.display = 'block';
+        errorContent.style.display = 'none';
+        button.textContent = 'View Error';
     } else {
-        breakdown.style.display = 'none';
-        button.textContent = 'Show Score Breakdown';
+        jsonView.style.display = 'none';
+        errorContent.style.display = 'block';
+        button.textContent = 'View Details';
     }
 }
 
-// Image processing utilities
-async function resizeImage(file, maxWidth = 1024, maxHeight = 1024, quality = 0.85) {
-    return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        img.onload = () => {
-            // Calculate new dimensions maintaining aspect ratio
-            let { width, height } = img;
-            
-            if (width > height) {
-                if (width > maxWidth) {
-                    height = (height * maxWidth) / width;
-                    width = maxWidth;
-                }
-            } else {
-                if (height > maxHeight) {
-                    width = (width * maxHeight) / height;
-                    height = maxHeight;
-                }
+function hideAllSections() {
+    document.getElementById('previewSection').style.display = 'none';
+    document.getElementById('loadingSection').style.display = 'none';
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('errorSection').style.display = 'none';
+    document.getElementById('uploadArea').style.display = 'block';
+}
+
+function resetUpload() {
+    selectedFile = null;
+    hideAllSections();
+    
+    // Clear file input
+    document.getElementById('imageInput').value = '';
+    
+    // Clear preview
+    const imagePreview = document.getElementById('imagePreview');
+    imagePreview.src = '';
+    imagePreview.style.display = 'none';
+    
+    // Hide HEIC placeholder if present
+    const heicPlaceholder = document.getElementById('heicPlaceholder');
+    if (heicPlaceholder) {
+        heicPlaceholder.style.display = 'none';
+    }
+    
+    // Show upload area
+    document.getElementById('uploadArea').style.display = 'block';
+}
+
+function updateLoadingStatus(status) {
+    const statusElement = document.getElementById('loadingStatus');
+    if (statusElement) {
+        statusElement.textContent = status;
+    }
+}
+
+// Camera functions
+async function openCamera() {
+    const modal = document.getElementById('cameraModal');
+    const video = document.getElementById('cameraVideo');
+    
+    try {
+        // Request camera access
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment', // Use back camera if available
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
             }
-            
-            // Set canvas dimensions
-            canvas.width = width;
-            canvas.height = height;
-            
-            // Enable high-quality resizing
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            
-            // Draw resized image
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Check WebP support and convert
-            canvas.toBlob((blob) => {
-                if (blob) {
-                    const resizedFile = new File([blob], file.name, { 
-                        type: blob.type,
-                        lastModified: Date.now()
-                    });
-                    resolve({
-                        file: resizedFile,
-                        originalSize: file.size,
-                        newSize: blob.size,
-                        compressionRatio: ((file.size - blob.size) / file.size * 100).toFixed(1),
-                        dimensions: { width, height },
-                        originalDimensions: { width: img.width, height: img.height }
-                    });
-                } else {
-                    // Fallback to original file if conversion fails
-                    resolve({
-                        file: file,
-                        originalSize: file.size,
-                        newSize: file.size,
-                        compressionRatio: '0',
-                        dimensions: { width: img.width, height: img.height },
-                        originalDimensions: { width: img.width, height: img.height }
-                    });
-                }
-            }, supportsWebP() ? 'image/webp' : 'image/jpeg', quality);
-        };
+        });
         
-        img.onerror = () => {
-            // If image fails to load, return original file
-            resolve({
-                file: file,
-                originalSize: file.size,
-                newSize: file.size,
-                compressionRatio: '0',
-                dimensions: { width: 0, height: 0 },
-                originalDimensions: { width: 0, height: 0 }
-            });
-        };
+        video.srcObject = cameraStream;
+        modal.style.display = 'block';
         
-        img.src = URL.createObjectURL(file);
-    });
+    } catch (error) {
+        console.error('Camera access error:', error);
+        alert('Unable to access camera. Please ensure you have granted camera permissions.');
+    }
 }
 
-function supportsWebP() {
-    // Check WebP support
-    const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    return canvas.toDataURL('image/webp').indexOf('image/webp') === 5;
+function closeCamera() {
+    const modal = document.getElementById('cameraModal');
+    
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+    
+    modal.style.display = 'none';
 }
 
+function capturePhoto() {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size to video size
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Draw video frame to canvas
+    ctx.drawImage(video, 0, 0);
+    
+    // Convert to blob and create file
+    canvas.toBlob((blob) => {
+        const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        
+        // Close camera and process file
+        closeCamera();
+        processFile(file);
+    }, 'image/jpeg', 0.8);
+}
+
+// Utility functions
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1186,186 +1208,65 @@ function formatBytes(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function updateLoadingStatus(status) {
-    document.getElementById('loadingStatus').textContent = status;
-}
-
-function hideAllSections() {
-    document.getElementById('loadingSection').style.display = 'none';
-    document.getElementById('resultsSection').style.display = 'none';
-    document.getElementById('errorSection').style.display = 'none';
-}
-
-function showError(message) {
-    hideAllSections();
-    document.getElementById('errorMessage').textContent = message;
-    document.getElementById('errorSection').style.display = 'block';
-}
-
-function showEnhancedError(errorDetail) {
-    // Store error data globally for JSON view
-    window.lastErrorResult = errorDetail;
-    
-    hideAllSections();
-    const errorSection = document.getElementById('errorSection');
-    errorSection.style.display = 'block';
-    
-    // Build enhanced error display
-    let html = `
-        <div class="error-card">
-            <div class="card-header">
-                <h3>❌ ${errorDetail.message || 'Error'}</h3>
-                <button class="btn-json" onclick="toggleErrorJsonView()">View JSON</button>
-            </div>
-            <div class="error-content" id="errorContent">
-    `;
-    
-    // Show quality feedback if available
-    if (errorDetail.quality_feedback) {
-        const feedback = errorDetail.quality_feedback;
+// Image optimization function
+async function resizeImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.8) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
         
-        html += `
-            <div class="quality-feedback-error">
-                <div class="feedback-overall">
-                    <strong>Quality Assessment:</strong> 
-                    <span class="quality-${feedback.overall}">${feedback.overall.toUpperCase()}</span>
-                </div>
-        `;
-        
-        if (feedback.issues && feedback.issues.length > 0) {
-            html += `
-                <div class="feedback-section">
-                    <h4>Issues Detected:</h4>
-                    <ul class="feedback-list issues">
-                        ${feedback.issues.map(issue => `<li>${issue}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-        
-        if (feedback.suggestions && feedback.suggestions.length > 0) {
-            html += `
-                <div class="feedback-section">
-                    <h4>Improvement Suggestions:</h4>
-                    <ul class="feedback-list suggestions">
-                        ${feedback.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-        
-        html += '</div>';
-    }
-    
-    html += `
-            </div>
-            <div class="json-view" id="errorJsonView" style="display: none;">
-                <pre>${JSON.stringify(errorDetail, null, 2)}</pre>
-            </div>
-            <button class="btn-secondary" onclick="resetUpload()">
-                Try Again
-            </button>
-        </div>
-    `;
-    
-    errorSection.innerHTML = html;
-}
-
-function toggleErrorJsonView() {
-    const jsonView = document.getElementById('errorJsonView');
-    const errorContent = document.getElementById('errorContent');
-    const button = document.querySelector('#errorSection .btn-json');
-    
-    if (jsonView.style.display === 'none') {
-        jsonView.style.display = 'block';
-        errorContent.style.display = 'none';
-        button.textContent = 'View Error';
-    } else {
-        jsonView.style.display = 'none';
-        errorContent.style.display = 'block';
-        button.textContent = 'View JSON';
-    }
-}
-
-function resetUpload() {
-    selectedFile = null;
-    document.getElementById('imageInput').value = '';
-    document.getElementById('uploadArea').style.display = 'block';
-    document.getElementById('previewSection').style.display = 'none';
-    hideAllSections();
-}
-
-// Camera functions
-async function openCamera() {
-    const modal = document.getElementById('cameraModal');
-    const video = document.getElementById('cameraVideo');
-    
-    try {
-        // Request camera permission
-        const constraints = {
-            video: {
-                facingMode: { ideal: 'environment' }, // Use rear camera on mobile
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-            }
+        img.onload = () => {
+            // Store original dimensions
+            const originalWidth = img.width;
+            const originalHeight = img.height;
+            
+            // Calculate new dimensions
+            let { width, height } = calculateNewDimensions(originalWidth, originalHeight, maxWidth, maxHeight);
+            
+            // Set canvas size
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw resized image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to blob
+            canvas.toBlob((blob) => {
+                const resizedFile = new File([blob], file.name, {
+                    type: 'image/jpeg',
+                    lastModified: Date.now()
+                });
+                
+                // Calculate compression ratio
+                const compressionRatio = Math.round((1 - blob.size / file.size) * 100);
+                
+                resolve({
+                    file: resizedFile,
+                    originalSize: file.size,
+                    newSize: blob.size,
+                    compressionRatio: compressionRatio,
+                    originalDimensions: { width: originalWidth, height: originalHeight },
+                    dimensions: { width, height }
+                });
+            }, 'image/jpeg', quality);
         };
         
-        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = cameraStream;
-        modal.style.display = 'flex';
-        
-    } catch (error) {
-        console.error('Camera error:', error);
-        let errorMessage = 'Unable to access camera. ';
-        
-        if (error.name === 'NotAllowedError') {
-            errorMessage += 'Please grant camera permission and try again.';
-        } else if (error.name === 'NotFoundError') {
-            errorMessage += 'No camera found on this device.';
-        } else {
-            errorMessage += 'Please ensure your browser supports camera access.';
-        }
-        
-        showError(errorMessage);
-    }
+        img.src = URL.createObjectURL(file);
+    });
 }
 
-function closeCamera() {
-    const modal = document.getElementById('cameraModal');
-    const video = document.getElementById('cameraVideo');
+function calculateNewDimensions(originalWidth, originalHeight, maxWidth, maxHeight) {
+    let width = originalWidth;
+    let height = originalHeight;
     
-    if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-        cameraStream = null;
-    }
+    // Calculate scaling factor
+    const scaleX = maxWidth / width;
+    const scaleY = maxHeight / height;
+    const scale = Math.min(scaleX, scaleY, 1); // Don't upscale
     
-    video.srcObject = null;
-    modal.style.display = 'none';
-}
-
-function capturePhoto() {
-    const video = document.getElementById('cameraVideo');
-    const canvas = document.getElementById('cameraCanvas');
-    const context = canvas.getContext('2d');
+    // Apply scaling
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
     
-    // Set canvas size to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Draw video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Convert canvas to blob
-    canvas.toBlob((blob) => {
-        if (blob) {
-            // Create a file from the blob
-            const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
-            
-            // Process the captured image
-            processFile(file);
-            
-            // Close camera
-            closeCamera();
-        }
-    }, 'image/jpeg', 0.9);
+    return { width, height };
 }

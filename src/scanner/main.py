@@ -109,7 +109,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router)
 app.include_router(scan.router)
-app.include_router(scan.web_router)  # Include web routes without prefix
 app.include_router(metrics.router)
 
 # Mount static files for web interface (if enabled)

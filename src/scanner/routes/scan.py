@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 config = get_config()
 
 router = APIRouter(prefix="/api/v1", tags=["scanner"])
-web_router = APIRouter(tags=["web"])
 
 # Constants
 MINIMUM_SCORE_THRESHOLD = 750  # Cards below this score are likely wrong matches
@@ -137,6 +136,103 @@ def _get_set_family(set_name: str) -> Optional[List[str]]:
         
     # No family mapping found
     logger.info(f"   ❌ No set family mapping found for '{set_name}'")
+    return None
+
+
+def _is_xy_family_match(gemini_set: str, card_set: str) -> bool:
+    """
+    Check if two sets are within the same XY family.
+    
+    Args:
+        gemini_set: Set name from AI (lowercased)
+        card_set: Set name from TCG API (lowercased)
+        
+    Returns:
+        True if both sets are in the XY family
+    """
+    xy_sets = [
+        "xy", "xy base",
+        "xy flashfire", "xy furious fists", "xy phantom forces", 
+        "xy primal clash", "xy roaring skies", "xy ancient origins",
+        "xy breakthrough", "xy breakpoint", "xy fates collide", 
+        "xy steam siege", "xy evolutions"
+    ]
+    
+    # Normalize set names for comparison
+    gemini_normalized = gemini_set.replace(" ", "").replace("-", "").lower()
+    card_normalized = card_set.replace(" ", "").replace("-", "").lower()
+    
+    gemini_is_xy = any(xy_set.replace(" ", "").replace("-", "") in gemini_normalized for xy_set in xy_sets)
+    card_is_xy = any(xy_set.replace(" ", "").replace("-", "") in card_normalized for xy_set in xy_sets)
+    
+    return gemini_is_xy and card_is_xy
+
+
+def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, Any]) -> Optional[str]:
+    """
+    Correct XY set identification based on card number ranges and visual features.
+    
+    Args:
+        card_number: The card number extracted by AI
+        search_params: Full search parameters including visual features
+        
+    Returns:
+        Corrected set name or None if no correction needed
+    """
+    if not card_number:
+        return None
+        
+    # Extract just the numeric part for range checking
+    number_match = re.search(r'(\d+)', card_number)
+    if not number_match:
+        return None
+        
+    num = int(number_match.group(1))
+    
+    # XY Set number ranges (approximate - may need refinement)
+    xy_set_ranges = {
+        "XY": (1, 146),  # Base XY set
+        "XY Flashfire": (1, 109),
+        "XY Furious Fists": (1, 113),
+        "XY Phantom Forces": (1, 124),
+        "XY Primal Clash": (1, 164),
+        "XY Roaring Skies": (1, 110),
+        "XY Ancient Origins": (1, 100),
+        "XY BREAKthrough": (1, 164),
+        "XY BREAKpoint": (1, 123),  # Greninja is #40 in this set
+        "XY Fates Collide": (1, 125),
+        "XY Steam Siege": (1, 116),
+        "XY Evolutions": (1, 113),
+    }
+    
+    # Check visual features for additional clues
+    visual_features = search_params.get('visual_features', {})
+    name = search_params.get('name', '').lower()
+    
+    # BREAK cards are strong indicators of BREAKpoint/BREAKthrough
+    if 'break' in name:
+        if num <= 164:  # BREAKthrough has more cards
+            return "XY BREAKthrough"
+        else:
+            return "XY BREAKpoint"
+    
+    # Check for specific Pokemon known to be in certain sets
+    # Greninja non-BREAK cards in BREAKpoint
+    if 'greninja' in name and not 'break' in name:
+        if num == 40:  # Specific Greninja from BREAKpoint
+            return "XY BREAKpoint"
+    
+    # Check visual era or other features
+    card_series = visual_features.get('card_series', '').lower()
+    foil_pattern = visual_features.get('foil_pattern', '').lower()
+    
+    # Gold/yellow foil often indicates BREAK cards
+    if 'gold' in foil_pattern or 'yellow' in foil_pattern:
+        if 'textured' in foil_pattern or 'break' in foil_pattern:
+            # Likely a BREAK card
+            return "XY BREAKpoint" if num <= 123 else "XY BREAKthrough"
+    
+    # If we can't determine, return None to keep original
     return None
 
 
@@ -383,6 +479,7 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
         "type_matches": 0,
         "set_exact": 0,
         "set_partial": 0,
+        "set_family_match": 0,        # NEW: For XY family matches
         "shiny_vault_bonus": 0,
         "visual_series_match": 0,      # NEW: Visual feature bonuses
         "visual_era_match": 0,         # NEW: Visual era consistency
@@ -394,7 +491,7 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
     has_number_match = False
     has_name_match = False
     
-    # Set name match check
+    # Set name match check with XY family handling
     if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
         gemini_set = str(gemini_params.get("set_name") or "").lower().strip()
         card_set = str(card_data.get("set", {}).get("name") or "").lower().strip()
@@ -403,7 +500,13 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
             has_set_match = True
             score_breakdown["set_exact"] = 2000  # Increased from 200
         elif gemini_set in card_set or card_set in gemini_set:
-            score_breakdown["set_partial"] = 500  # Increased from 100
+            # Special handling for XY family sets
+            if _is_xy_family_match(gemini_set, card_set):
+                # Within XY family but not exact match - moderate bonus instead of penalty
+                score_breakdown["set_family_match"] = 800
+                logger.debug(f"      XY family match: {gemini_set} <-> {card_set}")
+            else:
+                score_breakdown["set_partial"] = 500  # Increased from 100
     
     # Card number match check
     if gemini_params.get("number") and card_data.get("number"):
@@ -886,7 +989,18 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             if 'set_name' in search_params and search_params['set_name']:
                 set_name = str(search_params['set_name']).strip()
                 if set_name and set_name.lower() not in ['unknown', 'n/a', 'not visible']:
-                    cleaned_params['set_name'] = set_name
+                    # CRITICAL: Correct common XY misidentification
+                    if set_name.upper() == "XY" and 'number' in search_params:
+                        # Check if this might be a BREAKpoint/BREAKthrough card based on number ranges
+                        card_number = str(search_params.get('number', '')).strip()
+                        corrected_set = _correct_xy_set_based_on_number(card_number, search_params)
+                        if corrected_set:
+                            logger.info(f"🔧 Corrected set name from '{set_name}' to '{corrected_set}' based on card features")
+                            cleaned_params['set_name'] = corrected_set
+                        else:
+                            cleaned_params['set_name'] = set_name
+                    else:
+                        cleaned_params['set_name'] = set_name
             
             # If set_name is missing, try to extract it from set_symbol description
             if 'set_name' not in cleaned_params and 'set_symbol' in search_params and search_params['set_symbol']:
@@ -1787,74 +1901,3 @@ async def get_processed_image(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@web_router.get("/advanced")
-async def serve_advanced_interface():
-    """
-    Serve the advanced web interface.
-    
-    Returns:
-        The advanced HTML interface
-    """
-    try:
-        # Get the web directory path (same as in main.py)
-        web_dir = Path(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web"))
-        advanced_html_path = web_dir / "index_advanced.html"
-        
-        if not advanced_html_path.exists():
-            raise HTTPException(status_code=404, detail="Advanced interface not found")
-        
-        return FileResponse(
-            path=str(advanced_html_path),
-            media_type="text/html",
-            headers={"Cache-Control": "no-cache"}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error serving advanced interface: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@web_router.get("/advanced/{file_path:path}")
-async def serve_advanced_assets(file_path: str):
-    """
-    Serve advanced interface static assets (JS, CSS).
-    
-    Args:
-        file_path: Path to the static asset
-        
-    Returns:
-        The requested static file
-    """
-    try:
-        # Get the web directory path (same as in main.py)
-        web_dir = Path(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "web"))
-        
-        # Map requests to advanced versions
-        if file_path == "script.js":
-            file_path = "script_advanced.js"
-        elif file_path == "style.css":
-            file_path = "style_advanced.css"
-        
-        full_path = web_dir / file_path
-        
-        if not full_path.exists() or not full_path.is_file():
-            raise HTTPException(status_code=404, detail="File not found")
-        
-        # Determine media type
-        media_type = "text/javascript" if file_path.endswith('.js') else \
-                     "text/css" if file_path.endswith('.css') else \
-                     "text/plain"
-        
-        return FileResponse(
-            path=str(full_path),
-            media_type=media_type,
-            headers={"Cache-Control": "no-cache"}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error serving advanced asset {file_path}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))

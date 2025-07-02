@@ -226,8 +226,9 @@ class GeminiService:
         if processing_tier == "fast":
             # Ultra-minimal prompt for speed
             return """Pokemon card identification. Detect card type first, note visual features.
+XY-era: Use FULL set name (XY BREAKpoint, XY BREAKthrough, etc) not just "XY"
 TCG_SEARCH_START
-{"card_type": "pokemon_front/pokemon_back/non_pokemon/unknown", "name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "set", "number": "card#", "hp": "HP", "types": ["type"], "card_series": "e-Card/EX/XY/etc", "border_color": "color", "foil_pattern": "holo type"}
+{"card_type": "pokemon_front/pokemon_back/non_pokemon/unknown", "name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "FULL set name", "number": "card#", "hp": "HP", "types": ["type"], "card_series": "e-Card/EX/XY/etc", "border_color": "color", "foil_pattern": "holo type"}
 TCG_SEARCH_END"""
             
         elif processing_tier == "enhanced":
@@ -254,10 +255,24 @@ IMPORTANT for Set Name Extraction:
 - Extract the actual set NAME, not just symbol description
 - Examples: "Plasma Freeze" (not "Plasma Freeze set symbol"), "Battle Styles" (not "Battle Styles logo")
 - HeartGold/SoulSilver era: "HS—Undaunted", "HS—Unleashed", "HS—Triumphant", "HeartGold & SoulSilver"
-- XY-era: Look for specific expansion names like "BREAKpoint", "BREAKthrough", "Fates Collide", "Steam Siege"
+- XY-era CRITICAL: Never just say "XY" - look for the FULL set name:
+  * "XY" (base set only - has Xerneas/Yveltal on packs)
+  * "XY BREAKpoint" (has Gyarados on pack, BREAK evolution cards)
+  * "XY BREAKthrough" (has Mewtwo on pack)
+  * "XY Fates Collide" (has Zygarde on pack)
+  * "XY Steam Siege" (has Volcanion on pack)
+  * "XY Evolutions" (nostalgia set with classic designs)
+  * "XY Flashfire", "XY Furious Fists", "XY Phantom Forces", "XY Primal Clash", "XY Roaring Skies", "XY Ancient Origins"
 - Black & White era: "Plasma Freeze", "Plasma Storm", "Plasma Blast", "Emerging Powers", "Noble Victories"
-- Check for BREAK evolution mechanics or Mega evolution symbols
+- BREAK evolution cards are specifically from BREAKpoint/BREAKthrough sets
 - Note any promo markings or special set indicators
+
+BREAK CARD DETECTION (XY BREAKpoint/BREAKthrough era):
+- BREAK evolution cards have UNIQUE sideways/horizontal orientation
+- Gold/yellow textured foil pattern covering entire card
+- "BREAK" text appears after Pokemon name (e.g., "Greninja BREAK")
+- If you see a sideways card with gold foil, it's likely from BREAKpoint or BREAKthrough
+- Regular cards in these sets have standard vertical orientation
 
 PRIME CARD DETECTION (HeartGold/SoulSilver era):
 - Look for "Prime" text on the card (usually near the Pokemon name)
@@ -316,7 +331,12 @@ CARD TYPE:
 
 VISUAL FEATURES - Important for accurate identification:
 Look for: set symbols, card series (e-Card/EX/XY/etc), border color, foil patterns
-XY-era cards: Look for specific expansion names like "BREAKpoint", "BREAKthrough", "Fates Collide", not just "XY"
+XY-era cards CRITICAL: NEVER just say "XY" - identify the FULL set name:
+- "XY" = base set only (Xerneas/Yveltal theme)
+- "XY BREAKpoint" = has BREAK evolution cards, Gyarados theme
+- "XY BREAKthrough" = Mewtwo theme
+- "XY Fates Collide" = Zygarde theme
+- Other XY sets: Flashfire, Furious Fists, Phantom Forces, Primal Clash, Roaring Skies, Ancient Origins, Steam Siege, Evolutions
 
 IMPORTANT: Detect language and preserve original names.
 
