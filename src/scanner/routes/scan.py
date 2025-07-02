@@ -187,7 +187,7 @@ def _get_set_from_total_count(total_count: int) -> Optional[str]:
         164: "XY Primal Clash",  # Note: Same as BREAKthrough
         110: "XY Roaring Skies",
         100: "XY Ancient Origins",
-        123: "XY BREAKpoint",  # This should match Greninja "40/122"
+        122: "XY BREAKpoint",  # This should match Greninja "41/122"
         125: "XY Fates Collide",
         116: "XY Steam Siege",
         # Note: XY Evolutions has 113 cards (same as Furious Fists)
@@ -263,7 +263,7 @@ def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, A
                 "XY": (1, 146), "XY Flashfire": (1, 109), "XY Furious Fists": (1, 113),
                 "XY Phantom Forces": (1, 124), "XY Primal Clash": (1, 164), 
                 "XY Roaring Skies": (1, 110), "XY Ancient Origins": (1, 100),
-                "XY BREAKthrough": (1, 164), "XY BREAKpoint": (1, 123),
+                "XY BREAKthrough": (1, 164), "XY BREAKpoint": (1, 122),
                 "XY Fates Collide": (1, 125), "XY Steam Siege": (1, 116), 
                 "XY Evolutions": (1, 113)
             }
