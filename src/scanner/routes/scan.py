@@ -168,12 +168,54 @@ def _is_xy_family_match(gemini_set: str, card_set: str) -> bool:
     return gemini_is_xy and card_is_xy
 
 
-def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, Any]) -> Optional[str]:
+def _get_set_from_total_count(total_count: int) -> Optional[str]:
     """
-    Correct XY set identification based on card number ranges and visual features.
+    Map total card count to XY set name.
     
     Args:
-        card_number: The card number extracted by AI
+        total_count: Total number of cards in the set (from "40/122" format)
+        
+    Returns:
+        XY set name or None if no match found
+    """
+    # XY Set total card counts (extracted from ranges)
+    xy_total_counts = {
+        146: "XY",  # Base XY set
+        109: "XY Flashfire",
+        113: "XY Furious Fists", 
+        124: "XY Phantom Forces",
+        164: "XY Primal Clash",  # Note: Same as BREAKthrough
+        110: "XY Roaring Skies",
+        100: "XY Ancient Origins",
+        123: "XY BREAKpoint",  # This should match Greninja "40/122"
+        125: "XY Fates Collide",
+        116: "XY Steam Siege",
+        # Note: XY Evolutions has 113 cards (same as Furious Fists)
+        # Note: XY BREAKthrough has 164 cards (same as Primal Clash)
+    }
+    
+    # Handle duplicates by checking for specific context clues
+    if total_count in xy_total_counts:
+        return xy_total_counts[total_count]
+    
+    # Handle ambiguous cases (164 cards could be Primal Clash or BREAKthrough)
+    if total_count == 164:
+        # Return most common/likely option, correction logic will refine further
+        return "XY BREAKthrough"
+    elif total_count == 113:
+        # Return most common/likely option between Furious Fists and Evolutions
+        return "XY Furious Fists"
+    
+    logger.info(f"   ❌ No XY set found for total count: {total_count}")
+    return None
+
+
+def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, Any]) -> Optional[str]:
+    """
+    Correct XY set identification based on card number, total count, and visual features.
+    
+    Args:
+        card_number: The card number extracted by AI (e.g., "41/122")
         search_params: Full search parameters including visual features
         
     Returns:
@@ -181,58 +223,85 @@ def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, A
     """
     if not card_number:
         return None
-        
-    # Extract just the numeric part for range checking
-    number_match = re.search(r'(\d+)', card_number)
-    if not number_match:
+    
+    logger.info(f"🔍 XY correction logic running for card number: '{card_number}'")
+    
+    # Try to extract both individual number and total count from formats like "41/122"
+    total_count = None
+    individual_num = None
+    
+    # Parse "41/122" format
+    if '/' in card_number:
+        parts = card_number.split('/')
+        if len(parts) == 2:
+            try:
+                individual_num = int(parts[0].strip())
+                total_count = int(parts[1].strip())
+                logger.info(f"   📊 Parsed: individual={individual_num}, total={total_count}")
+            except ValueError:
+                logger.warning(f"   ⚠️ Failed to parse card number format: '{card_number}'")
+    
+    # Fallback: extract just the individual number
+    if individual_num is None:
+        number_match = re.search(r'(\d+)', card_number)
+        if number_match:
+            individual_num = int(number_match.group(1))
+            logger.info(f"   📊 Fallback parsed individual number: {individual_num}")
+    
+    if individual_num is None:
+        logger.warning(f"   ❌ Could not extract any number from: '{card_number}'")
         return None
-        
-    num = int(number_match.group(1))
     
-    # XY Set number ranges (approximate - may need refinement)
-    xy_set_ranges = {
-        "XY": (1, 146),  # Base XY set
-        "XY Flashfire": (1, 109),
-        "XY Furious Fists": (1, 113),
-        "XY Phantom Forces": (1, 124),
-        "XY Primal Clash": (1, 164),
-        "XY Roaring Skies": (1, 110),
-        "XY Ancient Origins": (1, 100),
-        "XY BREAKthrough": (1, 164),
-        "XY BREAKpoint": (1, 123),  # Greninja is #40 in this set
-        "XY Fates Collide": (1, 125),
-        "XY Steam Siege": (1, 116),
-        "XY Evolutions": (1, 113),
-    }
+    # PRIMARY: Use total count to identify set if available
+    if total_count:
+        set_from_total = _get_set_from_total_count(total_count)
+        if set_from_total:
+            logger.info(f"   ✅ Set identified by total count ({total_count}): {set_from_total}")
+            
+            # Validate that individual number falls within expected range
+            xy_set_ranges = {
+                "XY": (1, 146), "XY Flashfire": (1, 109), "XY Furious Fists": (1, 113),
+                "XY Phantom Forces": (1, 124), "XY Primal Clash": (1, 164), 
+                "XY Roaring Skies": (1, 110), "XY Ancient Origins": (1, 100),
+                "XY BREAKthrough": (1, 164), "XY BREAKpoint": (1, 123),
+                "XY Fates Collide": (1, 125), "XY Steam Siege": (1, 116), 
+                "XY Evolutions": (1, 113)
+            }
+            
+            if set_from_total in xy_set_ranges:
+                min_num, max_num = xy_set_ranges[set_from_total]
+                if min_num <= individual_num <= max_num:
+                    logger.info(f"   ✅ Individual number {individual_num} is valid for {set_from_total} (range: {min_num}-{max_num})")
+                    return set_from_total
+                else:
+                    logger.warning(f"   ⚠️ Individual number {individual_num} outside expected range for {set_from_total} ({min_num}-{max_num})")
     
-    # Check visual features for additional clues
+    # SECONDARY: Use visual features for additional validation
     visual_features = search_params.get('visual_features', {})
     name = search_params.get('name', '').lower()
     
     # BREAK cards are strong indicators of BREAKpoint/BREAKthrough
     if 'break' in name:
-        if num <= 164:  # BREAKthrough has more cards
+        if individual_num <= 123:
+            logger.info(f"   ✅ BREAK card #{individual_num} → XY BREAKpoint")
+            return "XY BREAKpoint" 
+        elif individual_num <= 164:
+            logger.info(f"   ✅ BREAK card #{individual_num} → XY BREAKthrough")
             return "XY BREAKthrough"
-        else:
-            return "XY BREAKpoint"
     
-    # Check for specific Pokemon known to be in certain sets
-    # Greninja non-BREAK cards in BREAKpoint
-    if 'greninja' in name and not 'break' in name:
-        if num == 40:  # Specific Greninja from BREAKpoint
-            return "XY BREAKpoint"
-    
-    # Check visual era or other features
-    card_series = visual_features.get('card_series', '').lower()
+    # TERTIARY: Check visual features
     foil_pattern = visual_features.get('foil_pattern', '').lower()
-    
-    # Gold/yellow foil often indicates BREAK cards
     if 'gold' in foil_pattern or 'yellow' in foil_pattern:
         if 'textured' in foil_pattern or 'break' in foil_pattern:
             # Likely a BREAK card
-            return "XY BREAKpoint" if num <= 123 else "XY BREAKthrough"
+            if individual_num <= 123:
+                logger.info(f"   ✅ Gold foil card #{individual_num} → XY BREAKpoint")
+                return "XY BREAKpoint"
+            elif individual_num <= 164:
+                logger.info(f"   ✅ Gold foil card #{individual_num} → XY BREAKthrough") 
+                return "XY BREAKthrough"
     
-    # If we can't determine, return None to keep original
+    logger.info(f"   ❌ No correction determined for card number: '{card_number}'")
     return None
 
 
@@ -989,12 +1058,13 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             if 'set_name' in search_params and search_params['set_name']:
                 set_name = str(search_params['set_name']).strip()
                 if set_name and set_name.lower() not in ['unknown', 'n/a', 'not visible']:
-                    # CRITICAL: Correct common XY misidentification
-                    if set_name.upper() == "XY" and 'number' in search_params:
-                        # Check if this might be a BREAKpoint/BREAKthrough card based on number ranges
+                    # CRITICAL: Correct XY-era set misidentification
+                    is_xy_era = set_name.upper().startswith("XY") or set_name.upper() == "XY"
+                    if is_xy_era and 'number' in search_params:
+                        # Check if this might need correction based on number ranges and total count
                         card_number = str(search_params.get('number', '')).strip()
                         corrected_set = _correct_xy_set_based_on_number(card_number, search_params)
-                        if corrected_set:
+                        if corrected_set and corrected_set != set_name:
                             logger.info(f"🔧 Corrected set name from '{set_name}' to '{corrected_set}' based on card features")
                             cleaned_params['set_name'] = corrected_set
                         else:
