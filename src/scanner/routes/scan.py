@@ -178,36 +178,55 @@ def _get_set_from_total_count(total_count: int) -> Optional[str]:
     Returns:
         XY set name or None if no match found
     """
-    # XY Set total card counts (extracted from ranges)
-    xy_total_counts = {
-        146: "XY",  # Base XY set
-        109: "XY Flashfire",
-        113: "XY Furious Fists", 
-        124: "XY Phantom Forces",
-        164: "XY Primal Clash",  # Note: Same as BREAKthrough
-        110: "XY Roaring Skies",
-        100: "XY Ancient Origins",
-        122: "XY BREAKpoint",  # This should match Greninja "41/122"
-        125: "XY Fates Collide",
-        116: "XY Steam Siege",
-        # Note: XY Evolutions has 113 cards (same as Furious Fists)
-        # Note: XY BREAKthrough has 164 cards (same as Primal Clash)
+    # XY Set total card counts - handle duplicates with context
+    xy_count_mappings = {
+        146: ["XY"],  # Base XY set - unique
+        109: ["XY Flashfire"],  # unique
+        113: ["XY Furious Fists", "XY Evolutions"],  # duplicate
+        122: ["XY Phantom Forces", "XY BREAKpoint"],  # duplicate  
+        164: ["XY Primal Clash", "XY BREAKthrough"],  # duplicate
+        110: ["XY Roaring Skies"],  # unique
+        100: ["XY Ancient Origins"],  # unique
+        125: ["XY Fates Collide"],  # unique
+        116: ["XY Steam Siege"],  # unique
     }
     
-    # Handle duplicates by checking for specific context clues
-    if total_count in xy_total_counts:
-        return xy_total_counts[total_count]
+    if total_count not in xy_count_mappings:
+        logger.info(f"   ❌ No XY set found for total count: {total_count}")
+        return None
     
-    # Handle ambiguous cases (164 cards could be Primal Clash or BREAKthrough)
-    if total_count == 164:
-        # Return most common/likely option, correction logic will refine further
+    possible_sets = xy_count_mappings[total_count]
+    
+    # If unique mapping, return it
+    if len(possible_sets) == 1:
+        logger.info(f"   ✅ Unique mapping for {total_count} cards: {possible_sets[0]}")
+        return possible_sets[0]
+    
+    # Handle duplicates with context clues
+    logger.info(f"   🔄 Multiple sets with {total_count} cards: {possible_sets}")
+    
+    # For 122 cards: Phantom Forces vs BREAKpoint
+    if total_count == 122:
+        # BREAKpoint is more recent and has specific visual cues
+        # Default to BREAKpoint, let further validation refine
+        logger.info(f"   🎯 Defaulting to XY BREAKpoint for 122 cards (vs Phantom Forces)")
+        return "XY BREAKpoint"
+    
+    # For 164 cards: Primal Clash vs BREAKthrough  
+    elif total_count == 164:
+        # BREAKthrough is more recent and has BREAK cards
+        logger.info(f"   🎯 Defaulting to XY BREAKthrough for 164 cards (vs Primal Clash)")
         return "XY BREAKthrough"
-    elif total_count == 113:
-        # Return most common/likely option between Furious Fists and Evolutions
-        return "XY Furious Fists"
     
-    logger.info(f"   ❌ No XY set found for total count: {total_count}")
-    return None
+    # For 113 cards: Furious Fists vs Evolutions
+    elif total_count == 113:
+        # Evolutions is more recent and has nostalgic designs
+        logger.info(f"   🎯 Defaulting to XY Evolutions for 113 cards (vs Furious Fists)")
+        return "XY Evolutions"
+    
+    # Fallback to first option
+    logger.warning(f"   ⚠️ Unhandled duplicate case for {total_count} cards, returning: {possible_sets[0]}")
+    return possible_sets[0]
 
 
 def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, Any]) -> Optional[str]:
@@ -261,7 +280,7 @@ def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, A
             # Validate that individual number falls within expected range
             xy_set_ranges = {
                 "XY": (1, 146), "XY Flashfire": (1, 109), "XY Furious Fists": (1, 113),
-                "XY Phantom Forces": (1, 124), "XY Primal Clash": (1, 164), 
+                "XY Phantom Forces": (1, 122), "XY Primal Clash": (1, 164), 
                 "XY Roaring Skies": (1, 110), "XY Ancient Origins": (1, 100),
                 "XY BREAKthrough": (1, 164), "XY BREAKpoint": (1, 122),
                 "XY Fates Collide": (1, 125), "XY Steam Siege": (1, 116), 
