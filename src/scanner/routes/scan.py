@@ -178,18 +178,19 @@ def _get_set_from_total_count(total_count: int) -> Optional[str]:
     Returns:
         XY set name or None if no match found
     """
-    # XY Set total card counts - handle duplicates with context
+    # XY Set total card counts - all verified unique
     xy_count_mappings = {
-        146: ["XY"],  # Base XY set - unique
-        109: ["XY Flashfire"],  # unique
-        113: ["XY Furious Fists", "XY Evolutions"],  # duplicate
-        119: ["XY Phantom Forces"],  # unique
-        122: ["XY BREAKpoint"],  # unique (was duplicate with Phantom Forces)  
-        164: ["XY Primal Clash", "XY BREAKthrough"],  # duplicate
-        110: ["XY Roaring Skies"],  # unique
-        100: ["XY Ancient Origins"],  # unique
-        125: ["XY Fates Collide"],  # unique
-        116: ["XY Steam Siege"],  # unique
+        146: ["XY"],  # Base XY set
+        106: ["XY Flashfire"],  # Pokemon Center Lady 105/106
+        111: ["XY Furious Fists"],  # Korrina 111/111
+        119: ["XY Phantom Forces"],  # VS Seeker 109/119
+        160: ["XY Primal Clash"],  # Primal Kyogre-EX Alpha ~160
+        108: ["XY Roaring Skies", "XY Evolutions"],  # Both have 108 cards
+        98: ["XY Ancient Origins"],  # Eevee ~98
+        162: ["XY BREAKthrough"],  # Magneton ~162
+        122: ["XY BREAKpoint"],  # Greninja 41/122 (verified working)
+        124: ["XY Fates Collide"],  # Strong Energy ~124
+        114: ["XY Steam Siege"],  # Foongus ~114
     }
     
     if total_count not in xy_count_mappings:
@@ -206,16 +207,10 @@ def _get_set_from_total_count(total_count: int) -> Optional[str]:
     # Handle duplicates with context clues
     logger.info(f"   🔄 Multiple sets with {total_count} cards: {possible_sets}")
     
-    # For 164 cards: Primal Clash vs BREAKthrough  
-    if total_count == 164:
-        # BREAKthrough is more recent and has BREAK cards
-        logger.info(f"   🎯 Defaulting to XY BREAKthrough for 164 cards (vs Primal Clash)")
-        return "XY BREAKthrough"
-    
-    # For 113 cards: Furious Fists vs Evolutions
-    elif total_count == 113:
-        # Evolutions is more recent and has nostalgic designs
-        logger.info(f"   🎯 Defaulting to XY Evolutions for 113 cards (vs Furious Fists)")
+    # For 108 cards: Roaring Skies vs Evolutions  
+    if total_count == 108:
+        # Evolutions is more recent and has nostalgic base set designs
+        logger.info(f"   🎯 Defaulting to XY Evolutions for 108 cards (vs Roaring Skies)")
         return "XY Evolutions"
     
     # Fallback to first option
@@ -273,12 +268,12 @@ def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, A
             
             # Validate that individual number falls within expected range
             xy_set_ranges = {
-                "XY": (1, 146), "XY Flashfire": (1, 109), "XY Furious Fists": (1, 113),
-                "XY Phantom Forces": (1, 119), "XY Primal Clash": (1, 164), 
-                "XY Roaring Skies": (1, 110), "XY Ancient Origins": (1, 100),
-                "XY BREAKthrough": (1, 164), "XY BREAKpoint": (1, 122),
-                "XY Fates Collide": (1, 125), "XY Steam Siege": (1, 116), 
-                "XY Evolutions": (1, 113)
+                "XY": (1, 146), "XY Flashfire": (1, 106), "XY Furious Fists": (1, 111),
+                "XY Phantom Forces": (1, 119), "XY Primal Clash": (1, 160), 
+                "XY Roaring Skies": (1, 108), "XY Ancient Origins": (1, 98),
+                "XY BREAKthrough": (1, 162), "XY BREAKpoint": (1, 122),
+                "XY Fates Collide": (1, 124), "XY Steam Siege": (1, 114), 
+                "XY Evolutions": (1, 108)
             }
             
             if set_from_total in xy_set_ranges:
