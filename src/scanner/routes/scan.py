@@ -1654,7 +1654,7 @@ async def scan_pokemon_card(request: ScanRequest):
             # Get quality score from pipeline if available
             quality_score = 0
             if 'processing' in pipeline_result:
-                quality_score = pipeline_result['processing'].get('quality_score', 0)
+                quality_score = float(pipeline_result['processing'].get('quality_score', 0))
             
             # Create quality feedback
             quality_feedback = QualityFeedback(
@@ -1691,7 +1691,7 @@ async def scan_pokemon_card(request: ScanRequest):
             # Get quality score from pipeline if available
             quality_score = 0
             if 'processing' in pipeline_result:
-                quality_score = pipeline_result['processing'].get('quality_score', 0)
+                quality_score = float(pipeline_result['processing'].get('quality_score', 0))
             
             # Create quality feedback for non-TCG cards
             quality_feedback = QualityFeedback(
