@@ -1798,7 +1798,6 @@ async def scan_pokemon_card(request: ScanRequest):
                     # Save processed image for early return if available
                     processed_path = None
                     if pipeline_result.get('processed_image_data'):
-                        from ..services.image_processor import save_processed_image
                         processed_path = save_processed_image(
                             pipeline_result['processed_image_data'], 
                             request.filename or "image", 
