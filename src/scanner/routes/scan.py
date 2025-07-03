@@ -1647,43 +1647,7 @@ async def scan_pokemon_card(request: ScanRequest):
         logger.info(f"   ❤️ HP: '{parsed_data.get('hp')}'")
         logger.info(f"   🎨 Types: {parsed_data.get('types')}")
         
-        # Check if Gemini response contains vague indicators suggesting poor image quality
-        if contains_vague_indicators(parsed_data):
-            logger.warning("⚠️ Gemini response contains vague indicators - image quality likely too low")
-            
-            # Get quality score from pipeline if available
-            quality_score = 0
-            if 'processing' in pipeline_result:
-                quality_score = float(pipeline_result['processing'].get('quality_score', 0))
-            
-            # Create quality feedback
-            quality_feedback = QualityFeedback(
-                overall="poor",
-                issues=[
-                    "Image too blurry to read card details clearly",
-                    "Card text and numbers are not legible"
-                ],
-                suggestions=[
-                    "Ensure the card is well-lit with no shadows",
-                    "Hold the camera steady and wait for auto-focus",
-                    "Try taking the photo from directly above the card",
-                    "Clean the camera lens if needed"
-                ]
-            )
-            
-            error_detail = {
-                "message": "Image quality too low to identify card details. The card text and numbers are not clearly visible.",
-                "error_type": "image_quality",
-                "quality_feedback": quality_feedback.dict(),
-                "quality_score": quality_score
-            }
-            
-            raise HTTPException(
-                status_code=400,
-                detail=json.dumps(error_detail)
-            )
-        
-        # Check authenticity score to filter out non-TCG Pokemon cards
+        # Check authenticity score to filter out non-TCG Pokemon cards (prioritize over vague indicators)
         authenticity_score = parsed_data.get('authenticity_info', {}).get('authenticity_score', 100)
         if authenticity_score is not None and authenticity_score < 60:
             logger.warning(f"⚠️ Low authenticity score ({authenticity_score}) - likely non-TCG Pokemon card")
@@ -1713,6 +1677,42 @@ async def scan_pokemon_card(request: ScanRequest):
                 "quality_feedback": quality_feedback.dict(),
                 "quality_score": quality_score,
                 "authenticity_score": authenticity_score
+            }
+            
+            raise HTTPException(
+                status_code=400,
+                detail=json.dumps(error_detail)
+            )
+        
+        # Check if Gemini response contains vague indicators suggesting poor image quality
+        if contains_vague_indicators(parsed_data):
+            logger.warning("⚠️ Gemini response contains vague indicators - image quality likely too low")
+            
+            # Get quality score from pipeline if available
+            quality_score = 0
+            if 'processing' in pipeline_result:
+                quality_score = float(pipeline_result['processing'].get('quality_score', 0))
+            
+            # Create quality feedback
+            quality_feedback = QualityFeedback(
+                overall="poor",
+                issues=[
+                    "Image too blurry to read card details clearly",
+                    "Card text and numbers are not legible"
+                ],
+                suggestions=[
+                    "Ensure the card is well-lit with no shadows",
+                    "Hold the camera steady and wait for auto-focus",
+                    "Try taking the photo from directly above the card",
+                    "Clean the camera lens if needed"
+                ]
+            )
+            
+            error_detail = {
+                "message": "Image quality too low to identify card details. The card text and numbers are not clearly visible.",
+                "error_type": "image_quality",
+                "quality_feedback": quality_feedback.dict(),
+                "quality_score": quality_score
             }
             
             raise HTTPException(
