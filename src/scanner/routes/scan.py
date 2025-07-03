@@ -616,21 +616,43 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
         logger.info("🔍 Card back detected - skipping vague indicator checks")
         return False
     
+    # Check if Gemini gave high readability score - trust that over vague detection
+    authenticity_info = parsed_data.get('authenticity_info', {})
+    readability_score = authenticity_info.get('readability_score')
+    if readability_score and readability_score >= 90:
+        logger.info(f"🔍 High readability score ({readability_score}) - skipping vague indicator checks")
+        return False
+    
     # Phrases that indicate Gemini couldn't clearly identify details
+    # Use word boundaries to prevent substring matches (e.g., "era" in "energy")
     vague_phrases = [
         "not visible", "not fully visible", "likely", "possibly", 
         "appears to be", "hard to tell", "unclear", "can't see",
         "cannot see", "difficult to see", "seems like", "looks like",
-        "maybe", "unknown", "uncertain", "not sure", "era"
+        "maybe", "unknown", "uncertain", "not sure"
     ]
     
     # Check critical fields for vague indicators
     critical_fields = ['set_name', 'number', 'name']
     for field in critical_fields:
         value = str(parsed_data.get(field, '')).lower()
-        if value and any(phrase in value for phrase in vague_phrases):
-            logger.info(f"🔍 Vague indicator found in {field}: '{value}'")
-            return True
+        if value:
+            # Use more precise matching to avoid false positives
+            for phrase in vague_phrases:
+                # Check for whole word matches or phrase boundaries
+                if (f" {phrase} " in f" {value} " or 
+                    value.startswith(phrase + " ") or 
+                    value.endswith(" " + phrase) or
+                    value == phrase):
+                    logger.info(f"🔍 Vague indicator found in {field}: '{value}' (matched: '{phrase}')")
+                    return True
+    
+    # Special handling for Energy cards - they have descriptive names that might seem vague
+    supertype = parsed_data.get('supertype', '').lower()
+    if supertype == 'energy':
+        logger.info("🔍 Energy card detected - relaxing vague indicator checks")
+        # Only check for very obvious vague indicators in energy cards
+        return False
     
     # If name is missing entirely, that's also a quality issue (but only for front cards)
     if not parsed_data.get('name') or parsed_data.get('name', '').strip() == '':
