@@ -283,6 +283,64 @@ class QualityAssessment:
         
         return feedback
     
+    def assess_authenticity_indicators(self, gemini_analysis) -> Dict:
+        """
+        Assess authenticity based on Gemini's analysis results.
+        
+        This provides a quality assessment perspective on card authenticity,
+        complementing Gemini's detailed authenticity analysis.
+        """
+        if not gemini_analysis or not gemini_analysis.authenticity_info:
+            return {
+                'authenticity_quality_rating': 'unknown',
+                'quality_concerns': [],
+                'quality_confidence': 'low'
+            }
+        
+        auth_info = gemini_analysis.authenticity_info
+        auth_score = auth_info.authenticity_score or 50
+        auth_confidence = auth_info.authenticity_confidence or 'medium'
+        
+        # Quality assessment perspective on authenticity
+        quality_concerns = []
+        
+        # Check for low authenticity scores
+        if auth_score < 30:
+            quality_concerns.append('Very low authenticity score detected')
+        elif auth_score < 50:
+            quality_concerns.append('Authenticity concerns identified')
+        
+        # Check for specific fake indicators in the indicators list
+        if auth_info.authenticity_indicators:
+            fake_indicators = [
+                'parody', 'fake', 'custom', 'joke', 'inappropriate', 
+                'misspelling', 'poor print quality', 'incorrect logo'
+            ]
+            for indicator in auth_info.authenticity_indicators:
+                indicator_lower = indicator.lower()
+                if any(fake_word in indicator_lower for fake_word in fake_indicators):
+                    quality_concerns.append(f'Fake card indicator: {indicator}')
+        
+        # Determine overall authenticity quality rating
+        if auth_score >= 80 and auth_confidence == 'high':
+            rating = 'excellent'
+        elif auth_score >= 60 and auth_confidence in ['high', 'medium']:
+            rating = 'good'
+        elif auth_score >= 40:
+            rating = 'questionable'
+        else:
+            rating = 'poor'
+        
+        # Map confidence level
+        quality_confidence = 'high' if auth_confidence == 'high' else 'medium'
+        
+        return {
+            'authenticity_quality_rating': rating,
+            'quality_concerns': quality_concerns,
+            'quality_confidence': quality_confidence,
+            'authenticity_score': auth_score
+        }
+    
     def _get_overall_rating(self, score: float) -> str:
         """Convert numeric score to rating."""
         if score >= 80:

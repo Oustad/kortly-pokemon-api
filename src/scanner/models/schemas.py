@@ -40,12 +40,21 @@ class LanguageInfo(BaseModel):
     translation_note: Optional[str] = Field(None, description="Note about translation performed")
 
 
+class AuthenticityInfo(BaseModel):
+    """Authenticity assessment information."""
+    authenticity_score: Optional[int] = Field(None, description="Authenticity score (0-100)")
+    authenticity_confidence: Optional[str] = Field(None, description="Confidence level (high/medium/low)")
+    authenticity_indicators: Optional[List[str]] = Field(None, description="Specific authenticity findings")
+    authenticity_reasoning: Optional[str] = Field(None, description="Explanation of authenticity assessment")
+
+
 class GeminiAnalysis(BaseModel):
     """Gemini's analysis of the Pokemon card."""
     raw_response: str = Field(..., description="Full Gemini response")
     structured_data: Optional[Dict[str, Any]] = Field(None, description="Extracted structured data")
     card_type_info: Optional[CardTypeInfo] = Field(None, description="Card type detection information")
     language_info: Optional[LanguageInfo] = Field(None, description="Language detection and translation info")
+    authenticity_info: Optional[AuthenticityInfo] = Field(None, description="Authenticity assessment information")
     confidence: Optional[float] = Field(None, description="Confidence score (0-1)")
     tokens_used: Optional[Dict[str, int]] = Field(None, description="Token usage")
 

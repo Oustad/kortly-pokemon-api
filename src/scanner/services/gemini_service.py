@@ -289,6 +289,17 @@ CARD NUMBER READING (CRITICAL):
 - e-Card era: Numbers often start with H (e.g., H11/H32, H25/H32)
 - Modern cards: Usually simple numbers (e.g., 62/116, 025/198)
 
+AUTHENTICITY ASSESSMENT:
+Evaluate if this appears to be an authentic Pokemon card by checking:
+- Print Quality: Text should be sharp, colors accurate, no obvious printing defects
+- Pokemon Logo: Official "Pokémon" logo with accent should be present and correctly formatted
+- Typography: Font consistency, proper spacing, no misspellings or odd phrasing
+- Card Stock: Should appear to have proper thickness and finish
+- Holographic Patterns: If present, should match authentic Pokemon foil patterns
+- Content: Check for parody names (e.g., "Thicc Charizard"), inappropriate text, or obvious jokes
+- Set Symbols: Symbols should match known authentic Pokemon set symbols
+- Card Layout: Should follow standard Pokemon card layout and design principles
+
 UNCERTAINTY AND CONFIDENCE HANDLING:
 - If text is blurry or unclear, indicate uncertainty in your analysis
 - Use phrases like "appears to be", "likely", "unclear due to image quality" when uncertain
@@ -315,7 +326,11 @@ TCG_SEARCH_START
   "visual_era": "vintage/classic/modern based on design style",
   "foil_pattern": "describe foil/holo pattern if present",
   "border_color": "yellow/silver/black/gold/other border color",
-  "energy_symbol_style": "classic/modern/3D energy symbol style"
+  "energy_symbol_style": "classic/modern/3D energy symbol style",
+  "authenticity_score": 85,
+  "authenticity_confidence": "high/medium/low",
+  "authenticity_indicators": ["specific findings like 'Official Pokemon logo present', 'Sharp print quality', 'Parody name detected', etc."],
+  "authenticity_reasoning": "Brief explanation of authenticity assessment"
 }
 TCG_SEARCH_END"""
             

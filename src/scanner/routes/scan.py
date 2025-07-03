@@ -1309,6 +1309,34 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             if visual_features:
                 cleaned_params['visual_features'] = visual_features
             
+            # Extract authenticity information
+            authenticity_info = {}
+            if 'authenticity_score' in search_params and search_params['authenticity_score']:
+                try:
+                    score = int(search_params['authenticity_score'])
+                    if 0 <= score <= 100:
+                        authenticity_info['authenticity_score'] = score
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid authenticity_score: {search_params['authenticity_score']}")
+            
+            if 'authenticity_confidence' in search_params and search_params['authenticity_confidence']:
+                confidence = str(search_params['authenticity_confidence']).strip().lower()
+                if confidence in ['high', 'medium', 'low']:
+                    authenticity_info['authenticity_confidence'] = confidence
+            
+            if 'authenticity_indicators' in search_params and search_params['authenticity_indicators']:
+                indicators = search_params['authenticity_indicators']
+                if isinstance(indicators, list):
+                    authenticity_info['authenticity_indicators'] = [str(i).strip() for i in indicators if str(i).strip()]
+            
+            if 'authenticity_reasoning' in search_params and search_params['authenticity_reasoning']:
+                reasoning = str(search_params['authenticity_reasoning']).strip()
+                if reasoning:
+                    authenticity_info['authenticity_reasoning'] = reasoning
+            
+            if authenticity_info:
+                cleaned_params['authenticity_info'] = authenticity_info
+            
             logger.info(f"✅ Extracted structured TCG search parameters: {cleaned_params}")
             return cleaned_params
             
@@ -1504,12 +1532,19 @@ async def scan_pokemon_card(request: ScanRequest):
             from ..models.schemas import LanguageInfo
             language_info = LanguageInfo(**parsed_data["language_info"])
 
+        # Create authenticity info object
+        authenticity_info = None
+        if parsed_data.get("authenticity_info"):
+            from ..models.schemas import AuthenticityInfo
+            authenticity_info = AuthenticityInfo(**parsed_data["authenticity_info"])
+
         # Create Gemini analysis object
         gemini_analysis = GeminiAnalysis(
             raw_response=gemini_data["response"],
             structured_data=parsed_data,
             card_type_info=card_type_info,
             language_info=language_info,
+            authenticity_info=authenticity_info,
             confidence=0.9 if parsed_data.get("name") else 0.5,
             tokens_used={
                 "prompt": gemini_data.get("prompt_tokens", 0),
