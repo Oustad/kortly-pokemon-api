@@ -317,7 +317,26 @@ Rate the authenticity of this Pokemon card from 0-100, considering:
 - Print quality, typography, and card layout
 - Official Pokemon logos and set symbols
 - Content authenticity (check for parody names, jokes, or fake text)
-- 100 = authentic official Pokemon card, 0 = clearly fake/parody
+- CRITICAL TCG AUTHENTICITY MARKERS (must be present for high scores):
+  * Standard TCG card format with proper text boxes and layout
+  * Official TCG fonts and typography (clean, professional printing)
+  * Legitimate set symbols (not amateur or custom designs)
+  * Proper copyright notices and legal text formatting
+  * Standard TCG card dimensions and border styling
+- RED FLAGS FOR NON-TCG CARDS (should result in scores ≤ 50):
+  * Sticker-like appearance or glossy finish inconsistent with TCG cards
+  * Amateur/home-printed quality or blurry text
+  * Non-standard layouts or unusual card designs
+  * Missing or incorrect copyright information
+  * Pokedex numbers instead of TCG card numbers (e.g., "#204" instead of "63/111")
+  * Collectible cards, stickers, or promotional items that aren't TCG cards
+  * Fan-made or custom cards with unofficial designs
+- SCORING GUIDELINES:
+  * 90-100: Clearly authentic official TCG card with all proper elements
+  * 70-89: Likely authentic but minor quality or clarity issues
+  * 50-69: Questionable authenticity, possible bootleg or unofficial card
+  * 30-49: Likely non-TCG Pokemon product (sticker, collectible, etc.)
+  * 0-29: Clearly fake, parody, or non-Pokemon content
 
 READABILITY ASSESSMENT:
 Rate the text readability of this Pokemon card from 0-100, with SPECIAL EMPHASIS on numbers:

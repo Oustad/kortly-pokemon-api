@@ -1682,6 +1682,43 @@ async def scan_pokemon_card(request: ScanRequest):
                 detail=json.dumps(error_detail)
             )
         
+        # Check authenticity score to filter out non-TCG Pokemon cards
+        authenticity_score = parsed_data.get('authenticity_info', {}).get('authenticity_score', 100)
+        if authenticity_score is not None and authenticity_score < 60:
+            logger.warning(f"⚠️ Low authenticity score ({authenticity_score}) - likely non-TCG Pokemon card")
+            
+            # Get quality score from pipeline if available
+            quality_score = 0
+            if 'processing' in pipeline_result:
+                quality_score = pipeline_result['processing'].get('quality_score', 0)
+            
+            # Create quality feedback for non-TCG cards
+            quality_feedback = QualityFeedback(
+                overall="poor",
+                issues=[
+                    "This appears to be a Pokemon card but not an official TCG card",
+                    "Possible sticker, collectible, or fan-made card detected"
+                ],
+                suggestions=[
+                    "Ensure you're scanning an official Pokemon Trading Card Game card",
+                    "Check for proper TCG formatting and official set symbols",
+                    "Avoid stickers, collectibles, or promotional items"
+                ]
+            )
+            
+            error_detail = {
+                "message": "This appears to be a Pokemon-related item but not an official TCG card. Please scan an official Pokemon Trading Card Game card.",
+                "error_type": "non_tcg_card",
+                "quality_feedback": quality_feedback.dict(),
+                "quality_score": quality_score,
+                "authenticity_score": authenticity_score
+            }
+            
+            raise HTTPException(
+                status_code=400,
+                detail=json.dumps(error_detail)
+            )
+        
         # Create card type info object
         card_type_info = None
         if parsed_data.get("card_type_info"):
