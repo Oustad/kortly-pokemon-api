@@ -503,6 +503,59 @@ def is_valid_card_number(number: Optional[str]) -> bool:
     return True
 
 
+def _is_pokemon_variant_match(gemini_name: str, card_name: str) -> bool:
+    """
+    Check if the Gemini-detected name matches a Pokemon variant (V, VMax, GX, ex, etc.).
+    
+    Args:
+        gemini_name: The Pokemon name detected by Gemini (e.g., "Luxray")
+        card_name: The card name from TCG API (e.g., "Luxray V")
+        
+    Returns:
+        True if this is a variant match (base Pokemon name matches)
+    """
+    # Common Pokemon variant suffixes
+    variant_suffixes = [
+        " v", " vmax", " vstar", " gx", " ex", " mega", " prime", 
+        " break", " tag team", " lv.", " lvl", " star", " delta", 
+        " shining", " light", " dark", " rocket's", " _", " -"
+    ]
+    
+    # Normalize names for comparison
+    gemini_clean = gemini_name.lower().strip()
+    card_clean = card_name.lower().strip()
+    
+    # Check if gemini name matches the base of a variant card
+    for suffix in variant_suffixes:
+        if card_clean.endswith(suffix) or suffix in card_clean:
+            # Remove the suffix and compare base names
+            card_base = card_clean
+            for s in variant_suffixes:
+                card_base = card_base.replace(s, "").strip()
+            
+            # Check if base names match
+            if gemini_clean == card_base:
+                return True
+            
+            # Also check if gemini name is contained in the base (for partial matches)
+            if gemini_clean in card_base or card_base in gemini_clean:
+                # But only if the length difference isn't too large (prevent false positives)
+                if abs(len(gemini_clean) - len(card_base)) <= 3:
+                    return True
+    
+    # Check the reverse: if gemini detected a variant but card is base
+    for suffix in variant_suffixes:
+        if gemini_clean.endswith(suffix) or suffix in gemini_clean:
+            gemini_base = gemini_clean
+            for s in variant_suffixes:
+                gemini_base = gemini_base.replace(s, "").strip()
+            
+            if gemini_base == card_clean:
+                return True
+    
+    return False
+
+
 def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
     """
     Check if Gemini response indicates it couldn't read the card clearly.
@@ -680,6 +733,7 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
         "set_number_name_triple": 0,  # NEW: Highest priority combination
         "set_number_combo": 0,        # NEW: High priority combination
         "name_exact": 0,
+        "name_variant_match": 0,      # NEW: Pokemon variant matching (V, VMax, GX, etc.)
         "name_partial": 0,
         "name_tag_team_penalty": 0,
         "number_exact": 0,
@@ -729,7 +783,7 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
         elif gemini_number in card_number or card_number in gemini_number:
             score_breakdown["number_partial"] = 800  # Increased from 500
     
-    # Name matching check
+    # Name matching check with Pokemon variant support
     if gemini_params.get("name") and card_data.get("name"):
         gemini_name = gemini_params.get("name", "").lower().strip()
         card_name = card_data.get("name", "").lower().strip()
@@ -738,6 +792,11 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
         if gemini_name == card_name:
             has_name_match = True
             score_breakdown["name_exact"] = 1500  # Decreased from 2000
+        # Pokemon variant matching (V, VMax, GX, ex, etc.)
+        elif _is_pokemon_variant_match(gemini_name, card_name):
+            has_name_match = True  # Treat as name match for combination bonuses
+            score_breakdown["name_variant_match"] = 1400  # High score for variant match
+            logger.debug(f"      Pokemon variant match: '{gemini_name}' <-> '{card_name}'")
         # Penalize tag team cards when searching for single Pokemon
         elif "&" in card_name and "&" not in gemini_name:
             # Card is a tag team but search is for single Pokemon
