@@ -276,7 +276,7 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                 "quality_score": 0,  # We don't have quality score for these
                 "error_message": display_message,
                 "top_matches": [],
-                "processed_image_filename": None
+                "processed_image_filename": response.get("processed_image_filename")
             }
         
         else:  # failed
@@ -287,7 +287,7 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                 "quality_score": 0,
                 "error_message": result.get("error", "Unknown error"),
                 "top_matches": [],
-                "processed_image_filename": None
+                "processed_image_filename": response.get("processed_image_filename")
             }
     
     except Exception as e:
