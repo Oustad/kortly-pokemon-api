@@ -218,6 +218,47 @@ def _get_set_from_total_count(total_count: int) -> Optional[str]:
     return possible_sets[0]
 
 
+def _correct_set_based_on_number_pattern(set_name: str, card_number: str) -> Optional[str]:
+    """
+    Correct set name based on card number patterns that indicate specific subsets.
+    
+    Args:
+        set_name: Original set name from Gemini
+        card_number: Card number from Gemini
+        
+    Returns:
+        Corrected set name if pattern detected, None otherwise
+    """
+    if not card_number:
+        return None
+    
+    card_number = card_number.upper().strip()
+    set_name_lower = set_name.lower().strip()
+    
+    logger.info(f"🔍 Checking number pattern correction for set '{set_name}' with number '{card_number}'")
+    
+    # Shiny Vault cards (SV prefix)
+    if card_number.startswith('SV') and 'hidden fates' in set_name_lower:
+        # Hidden Fates Shiny Vault
+        corrected = "Hidden Fates: Shiny Vault"
+        logger.info(f"   ✅ SV prefix detected → '{corrected}'")
+        return corrected
+    
+    # e-Card era (H prefix) 
+    if card_number.startswith('H') and ('aquapolis' in set_name_lower or 'skyridge' in set_name_lower or 'expedition' in set_name_lower):
+        # These are already correctly named, no change needed
+        return None
+        
+    # Paldea/PAL prefix (newer sets)
+    if card_number.startswith('PAL'):
+        if 'paldea' not in set_name_lower and 'pal' not in set_name_lower:
+            # Try to add Paldea designation
+            return f"Paldea {set_name}"
+    
+    # No pattern corrections needed
+    return None
+
+
 def _correct_xy_set_based_on_number(card_number: str, search_params: Dict[str, Any]) -> Optional[str]:
     """
     Correct XY set identification based on card number, total count, and visual features.
@@ -1291,19 +1332,25 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             if 'set_name' in search_params and search_params['set_name']:
                 set_name = str(search_params['set_name']).strip()
                 if set_name and set_name.lower() not in ['unknown', 'n/a', 'not visible']:
-                    # CRITICAL: Correct XY-era set misidentification
-                    is_xy_era = set_name.upper().startswith("XY") or set_name.upper() == "XY"
-                    if is_xy_era and 'number' in search_params:
-                        # Check if this might need correction based on number ranges and total count
-                        card_number = str(search_params.get('number', '')).strip()
-                        corrected_set = _correct_xy_set_based_on_number(card_number, search_params)
-                        if corrected_set and corrected_set != set_name:
-                            logger.info(f"🔧 Corrected set name from '{set_name}' to '{corrected_set}' based on card features")
-                            cleaned_params['set_name'] = corrected_set
+                    # CRITICAL: Pattern-based set correction based on card number
+                    card_number = str(search_params.get('number', '')).strip()
+                    corrected_set = _correct_set_based_on_number_pattern(set_name, card_number)
+                    if corrected_set and corrected_set != set_name:
+                        logger.info(f"🔧 Corrected set name from '{set_name}' to '{corrected_set}' based on number pattern")
+                        cleaned_params['set_name'] = corrected_set
+                    else:
+                        # CRITICAL: Correct XY-era set misidentification
+                        is_xy_era = set_name.upper().startswith("XY") or set_name.upper() == "XY"
+                        if is_xy_era and 'number' in search_params:
+                            # Check if this might need correction based on number ranges and total count
+                            corrected_set = _correct_xy_set_based_on_number(card_number, search_params)
+                            if corrected_set and corrected_set != set_name:
+                                logger.info(f"🔧 Corrected set name from '{set_name}' to '{corrected_set}' based on card features")
+                                cleaned_params['set_name'] = corrected_set
+                            else:
+                                cleaned_params['set_name'] = set_name
                         else:
                             cleaned_params['set_name'] = set_name
-                    else:
-                        cleaned_params['set_name'] = set_name
             
             # If set_name is missing, try to extract it from set_symbol description
             if 'set_name' not in cleaned_params and 'set_symbol' in search_params and search_params['set_symbol']:
