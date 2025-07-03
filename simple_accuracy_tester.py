@@ -456,8 +456,20 @@ def generate_html_report(results: List[Dict[str, Any]], output_file: str, api_ur
         </div>
 """
 
+    # Sort results by category: successes first, then expected non-ids, then failed scans
+    def sort_key(result):
+        category = result.get("card_info", {}).get("category", "failed")
+        if category == "success":
+            return 0  # Successes first
+        elif category == "expected_non_identification":
+            return 1  # Expected non-ids second
+        else:  # failed
+            return 2  # Failed scans last
+    
+    sorted_results = sorted(results, key=sort_key)
+
     # Generate individual test results
-    for result in results:
+    for result in sorted_results:
         card_info = result.get("card_info", {})
         category = card_info.get("category", "failed")
         
