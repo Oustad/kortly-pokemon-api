@@ -1734,6 +1734,68 @@ async def scan_pokemon_card(request: ScanRequest):
                     
                     return response
         
+        # Check for scratch/damage detection - after foil interference check
+        # Get quality score from processing info since quality_result is not in pipeline_result
+        processing_info_dict = pipeline_result.get('processing', {})
+        quality_score = processing_info_dict.get('quality_score', 100)
+        
+        logger.info(f"🔍 Scratch detection entry: quality_score={quality_score}, authenticity_info={authenticity_info is not None}")
+        if authenticity_info:
+            readability_score = authenticity_info.readability_score
+            # quality_score already retrieved above from processing_info_dict
+            
+            logger.info(f"🔍 Scratch detection check: readability={readability_score}, quality={quality_score}")
+            
+            # Check if card is too damaged to identify accurately
+            if (readability_score is not None and 
+                quality_score is not None and 
+                readability_score < 75 and 
+                quality_score < 60):
+                
+                logger.info(f"✅ Initial scratch conditions met: readability {readability_score} < 75, quality {quality_score} < 60")
+                
+                # Additional check: if card number is incomplete (ends with "/"), it's likely damaged
+                card_number = parsed_data.get('number', '')
+                has_incomplete_number = card_number.endswith('/')
+                
+                # Combined confidence score
+                combined_confidence = (readability_score + quality_score) / 2
+                
+                logger.info(f"🔍 Scratch detection details: card_number='{card_number}', incomplete={has_incomplete_number}, combined_confidence={combined_confidence:.1f}")
+                
+                if combined_confidence < 65 or (readability_score < 75 and has_incomplete_number):
+                    logger.info(f"🚨 SCRATCH DETECTION TRIGGERED: combined_confidence={combined_confidence:.1f} < 65 OR (readability={readability_score} < 75 AND incomplete={has_incomplete_number})")
+                    
+                    # Override success to false to prevent wrong matches
+                    error_message = "Pokemon card appears heavily damaged or scratched - skipping search to prevent incorrect identification"
+                    
+                    # Prepare response with no TCG matches
+                    response = ScanResponse(
+                        success=False,
+                        card_identification=gemini_analysis,
+                        tcg_matches=None,
+                        all_tcg_matches=None,
+                        best_match=None,
+                        processing=processing_info,
+                        cost_info=None,
+                        processed_image_filename=Path(processed_path).name if processed_path else None,
+                        error=error_message,
+                    )
+                    
+                    # Return early - don't search TCG database
+                    total_time = (time.time() - start_time) * 1000
+                    logger.info(f"⚠️ Damage detection scan complete in {total_time:.0f}ms - no TCG search performed")
+                    
+                    # Return simplified response if requested (default)
+                    if request.options.response_format != "detailed":
+                        return create_simplified_response(
+                            best_match=None,
+                            processing_info=processing_info,
+                            gemini_analysis=gemini_analysis
+                        )
+                    
+                    return response
+        
         # Track Gemini cost
         gemini_cost = 0.0
         if request.options.include_cost_tracking:

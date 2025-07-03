@@ -314,9 +314,12 @@ Rate the text readability of this Pokemon card from 0-100, with SPECIAL EMPHASIS
 - Card number clarity (MOST IMPORTANT - if numbers are unclear, score should be low)
 - Pokemon name legibility
 - Set information visibility
+- Physical damage assessment: scratches, wear, creases, stains affect readability
 - Overall text sharpness, especially considering foil/holo interference
 - 100 = all text perfectly readable including numbers, 0 = critical text illegible
 - IMPORTANT: If card numbers are hard to read due to foil/shine, significantly lower the score
+- CRITICAL: Physical damage like scratches, heavy wear, or surface damage should result in scores ≤ 70
+- DAMAGED CARDS: If you see scratches, scuffs, or wear that impairs text clarity, be harsh in scoring
 
 UNCERTAINTY AND CONFIDENCE HANDLING:
 - If text is blurry or unclear, indicate uncertainty in your analysis
