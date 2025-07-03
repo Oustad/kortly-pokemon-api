@@ -239,8 +239,8 @@ def _correct_set_based_on_number_pattern(set_name: str, card_number: str) -> Opt
     
     # Shiny Vault cards (SV prefix)
     if card_number.startswith('SV') and 'hidden fates' in set_name_lower:
-        # Hidden Fates Shiny Vault
-        corrected = "Hidden Fates: Shiny Vault"
+        # Hidden Fates Shiny Vault (use exact TCG database naming)
+        corrected = "Hidden Fates Shiny Vault"
         logger.info(f"   ✅ SV prefix detected → '{corrected}'")
         return corrected
     
