@@ -273,10 +273,32 @@ CARD NUMBER READING (CRITICAL - MOST IMPORTANT):
 - Card numbers are THE MOST CRITICAL field for accurate identification
 - Read numbers very carefully, character by character, looking in multiple locations
 - FOIL/HOLO INTERFERENCE: Shiny/holographic patterns can obscure numbers - look past reflections
-- Common locations: bottom right corner, bottom left, or center bottom of card
-- Common mistakes: H11 vs H1, 011 vs 01, 104 vs 10, SV16 vs other numbers
-- Modern formats: Look for prefixes like "SV" (Scarlet & Violet), "PAL" (Paldea), etc.
+
+CARD NUMBER LOCATION AND FORMAT:
+- VINTAGE CARDS (Base, Jungle, Fossil): Simple numbers like "22", "16", "43" in bottom-right or bottom-center
+- MODERN CARDS: "X/Y" format like "50/189", "144/185" in bottom-right corner
 - e-Card era: Numbers often start with H (e.g., H11/H32, H25/H32)
+- Recent sets: Look for prefixes like "SV" (Scarlet & Violet), "PAL" (Paldea), etc.
+
+WHAT TO IGNORE (DO NOT use as card numbers):
+- Attack damage numbers (usually larger, in attack text like "Thunder deals 30 damage")
+- HP numbers (top-right with HP symbol, like "HP 70")
+- Energy cost numbers (small symbols next to attacks)
+- Copyright/legal text numbers (© 1998, etc.)
+- Pokedex numbers (#144 in flavor text)
+- Numbers in attack names or descriptions
+
+WHERE TO LOOK FOR REAL CARD NUMBERS:
+- Bottom-right corner (most common)
+- Bottom-center of card (vintage cards)
+- Always ISOLATED from other text - not part of sentences
+- Usually smaller text, separate from game mechanics
+- On card border or margin, not in main text blocks
+
+VERIFICATION STEPS:
+- If you see multiple possible numbers, specify the EXACT LOCATION of each
+- Card numbers are standalone, not part of attack descriptions or flavor text
+- Common mistakes: H11 vs H1, 011 vs 01, 104 vs 10, SV16 vs other numbers
 - If numbers are unclear due to foil/damage, indicate uncertainty in your analysis
 - Double and triple-check the number - getting this wrong ruins the entire identification
 
