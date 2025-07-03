@@ -635,7 +635,8 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
     # Check critical fields for vague indicators
     critical_fields = ['set_name', 'number', 'name']
     for field in critical_fields:
-        value = str(parsed_data.get(field, '')).lower()
+        field_value = parsed_data.get(field, '') or ''
+        value = str(field_value).lower()
         if value:
             # Use more precise matching to avoid false positives
             for phrase in vague_phrases:
@@ -648,8 +649,8 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
                     return True
     
     # Special handling for Energy cards - they have descriptive names that might seem vague
-    supertype = parsed_data.get('supertype', '').lower()
-    if supertype == 'energy':
+    supertype = parsed_data.get('supertype', '') or ''
+    if supertype.lower() == 'energy':
         logger.info("🔍 Energy card detected - relaxing vague indicator checks")
         # Only check for very obvious vague indicators in energy cards
         return False
