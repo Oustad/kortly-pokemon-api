@@ -807,6 +807,8 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
         "set_exact": 0,
         "set_partial": 0,
         "set_family_match": 0,        # NEW: For XY family matches
+        "set_size_exact": 0,          # NEW: Set size exact match (Base Set vs Base Set 2)
+        "set_size_close": 0,          # NEW: Set size close match
         "shiny_vault_bonus": 0,
         "visual_series_match": 0,      # NEW: Visual feature bonuses
         "visual_era_match": 0,         # NEW: Visual era consistency
@@ -845,6 +847,18 @@ def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dic
             score_breakdown["number_exact"] = 2000  # Increased from 1000
         elif gemini_number in card_number or card_number in gemini_number:
             score_breakdown["number_partial"] = 800  # Increased from 500
+    
+    # Set size matching check (for Base Set vs Base Set 2 disambiguation)
+    if gemini_params.get("set_size") and card_data.get("set", {}).get("total"):
+        gemini_set_size = gemini_params.get("set_size")
+        card_set_size = card_data.get("set", {}).get("total")
+        
+        if gemini_set_size == card_set_size:
+            score_breakdown["set_size_exact"] = 300  # Bonus for exact set size match
+            logger.debug(f"      Set size exact match: {gemini_set_size} cards")
+        elif abs(gemini_set_size - card_set_size) <= 5:
+            score_breakdown["set_size_close"] = 100  # Small bonus for close set size
+            logger.debug(f"      Set size close match: {gemini_set_size} vs {card_set_size} cards")
     
     # Name matching check with Pokemon variant support
     if gemini_params.get("name") and card_data.get("name"):
@@ -1382,9 +1396,18 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                     cleaned_params['set_name'] = extracted_set_name
                     logger.info(f"🔍 Extracted set name '{extracted_set_name}' from symbol description: '{set_symbol_desc}'")
             
-            # Clean number
+            # Clean number and extract set size
             if 'number' in search_params and search_params['number']:
                 number = str(search_params['number']).strip()
+                
+                # Extract set size if present (e.g., "4/102" -> set_size = 102)
+                set_size = None
+                if '/' in number:
+                    parts = number.split('/')
+                    if len(parts) == 2 and parts[1].strip().isdigit():
+                        set_size = int(parts[1].strip())
+                        logger.info(f"🔢 Extracted set size: {set_size} from number '{number}'")
+                
                 # Extract card number (preserve prefix letters like H in H11/H32 and suffix letters like a in 177a)
                 number_match = re.search(r'([A-Za-z]*\d+[A-Za-z]*)', number)
                 if number_match:
@@ -1392,6 +1415,10 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                 else:
                     # Fallback: just clean whitespace if no standard pattern found
                     cleaned_params['number'] = number.split('/')[0].strip()
+                
+                # Store set size for matching
+                if set_size:
+                    cleaned_params['set_size'] = set_size
             
             # Clean HP
             if 'hp' in search_params and search_params['hp']:
@@ -1614,6 +1641,8 @@ async def scan_pokemon_card(request: ScanRequest):
         logger.info(f"   📛 Name: '{parsed_data.get('name')}'")
         logger.info(f"   🏷️ Set: '{parsed_data.get('set_name')}'")
         logger.info(f"   🔢 Number: '{parsed_data.get('number')}'")
+        if parsed_data.get('set_size'):
+            logger.info(f"   📊 Set Size: {parsed_data.get('set_size')} cards")
         logger.info(f"   ❤️ HP: '{parsed_data.get('hp')}'")
         logger.info(f"   🎨 Types: {parsed_data.get('types')}")
         
