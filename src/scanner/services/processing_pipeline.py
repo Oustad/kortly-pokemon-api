@@ -90,11 +90,12 @@ class ProcessingPipeline:
                     start_time
                 )
             
-            # Step 2: Determine Processing Tier
-            tier = self._determine_tier(quality_result['quality_score'], user_preferences)
+            # Step 2: Get Processing Configuration
+            processing_config = self._determine_processing_config(quality_result['quality_score'], user_preferences)
+            tier = processing_config['tier']  # Extract tier for backwards compatibility
             tier_config = self.tier_configs[tier]
             
-            processing_log.append(f"Selected tier: {tier} (quality: {quality_result['quality_score']:.1f})")
+            processing_log.append(f"Using comprehensive analysis with authenticity detection (quality: {quality_result['quality_score']:.1f})")
             
             # Step 3: Image Preprocessing
             preprocess_start = time.time()
@@ -107,12 +108,11 @@ class ProcessingPipeline:
             
             processing_log.append(f"Image preprocessing: {preprocess_time:.1f}ms")
             
-            # Step 4: Gemini Analysis
+            # Step 4: Comprehensive Gemini Analysis with Authenticity Detection
             gemini_start = time.time()
             gemini_result = await self.gemini_service.identify_pokemon_card(
                 processed_image_bytes,
-                optimize_for_speed=(tier == 'fast'),
-                processing_tier=tier
+                optimize_for_speed=True  # Always optimize for speed with comprehensive prompt
             )
             gemini_time = (time.time() - gemini_start) * 1000
             
@@ -156,28 +156,23 @@ class ProcessingPipeline:
                 start_time
             )
     
-    def _determine_tier(
+    def _determine_processing_config(
         self, 
         quality_score: float, 
         user_preferences: Optional[Dict] = None
-    ) -> str:
-        """Determine appropriate processing tier."""
+    ) -> Dict:
+        """Get comprehensive processing configuration."""
         
-        # User preference override
-        if user_preferences:
-            if user_preferences.get('prefer_speed') and quality_score >= 60:
-                return 'fast'
-            elif user_preferences.get('prefer_quality'):
-                return 'enhanced'
-            elif user_preferences.get('max_processing_time'):
-                max_time = user_preferences['max_processing_time']
-                if max_time <= 1500:
-                    return 'fast'
-                elif max_time <= 2500:
-                    return 'standard'
+        # Always use comprehensive analysis with authenticity detection
+        config = self.quality_assessor.get_processing_configuration(quality_score)
         
-        # Default tier selection based on quality
-        return self.quality_assessor.get_processing_tier(quality_score)
+        # Apply user time preferences to target time
+        if user_preferences and user_preferences.get('max_processing_time'):
+            max_time = user_preferences['max_processing_time']
+            if max_time < config['target_time_ms']:
+                config['target_time_ms'] = max_time
+        
+        return config
     
     async def _preprocess_image(
         self, 

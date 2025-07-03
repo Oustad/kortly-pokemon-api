@@ -56,16 +56,14 @@ class GeminiService:
         image_bytes: bytes,
         optimize_for_speed: bool = True,
         retry_unlimited: bool = False,
-        processing_tier: str = "standard",
     ) -> Dict[str, Any]:
         """
-        Use Gemini to identify a Pokemon card from an image.
+        Use Gemini to identify a Pokemon card from an image with comprehensive analysis and authenticity detection.
 
         Args:
             image_bytes: The image data as bytes
             optimize_for_speed: If True, use optimizations to reduce processing time
             retry_unlimited: If True, retry with unlimited tokens if MAX_TOKENS error
-            processing_tier: Processing tier (fast/standard/enhanced) for prompt optimization
 
         Returns:
             Dictionary containing Gemini's response and metadata
@@ -85,11 +83,11 @@ class GeminiService:
                     pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
                     logger.info(f"Resized image to {new_size} for faster processing")
 
-            # Get tier-specific optimized prompt
-            prompt = self._get_optimized_prompt(processing_tier)
+            # Get comprehensive analysis prompt with authenticity detection
+            prompt = self._get_optimized_prompt()
 
-            # Configure tier-specific generation settings
-            generation_config = self._get_generation_config(processing_tier, retry_unlimited)
+            # Configure optimized generation settings
+            generation_config = self._get_generation_config(retry_unlimited)
 
             # Configure permissive safety settings for trading card analysis
             safety_settings = [
@@ -220,20 +218,9 @@ class GeminiService:
                 "error": f"Unexpected error: {str(e)}",
             }
 
-    def _get_optimized_prompt(self, processing_tier: str) -> str:
-        """Get tier-specific optimized prompt for faster processing."""
-        
-        if processing_tier == "fast":
-            # Ultra-minimal prompt for speed
-            return """Pokemon card identification. Detect card type first, note visual features.
-XY-era: Use FULL set name (XY BREAKpoint, XY BREAKthrough, etc) not just "XY"
-TCG_SEARCH_START
-{"card_type": "pokemon_front/pokemon_back/non_pokemon/unknown", "name": "pokemon name", "original_name": "name as shown on card", "language": "en/fr/ja/de/es/etc", "set_name": "FULL set name", "number": "card#", "hp": "HP", "types": ["type"], "card_series": "e-Card/EX/XY/etc", "border_color": "color", "foil_pattern": "holo type"}
-TCG_SEARCH_END"""
-            
-        elif processing_tier == "enhanced":
-            # Comprehensive prompt for challenging images
-            return """Analyze this image comprehensively. First determine what type of card this is, then identify visual distinguishing features.
+    def _get_optimized_prompt(self) -> str:
+        """Get the comprehensive Pokemon card analysis prompt with authenticity detection."""
+        return """Analyze this image comprehensively. First determine what type of card this is, then identify visual distinguishing features.
 
 CARD TYPE DETECTION:
 - pokemon_front: Pokemon card showing the front (Pokemon, attacks, abilities)
@@ -333,51 +320,9 @@ TCG_SEARCH_START
   "authenticity_reasoning": "Brief explanation of authenticity assessment"
 }
 TCG_SEARCH_END"""
-            
-        else:  # standard tier
-            # Balanced prompt for good performance
-            return """Identify this card. First determine the card type, then note visual distinguishing features.
 
-CARD TYPE:
-- pokemon_front: Pokemon card showing the front
-- pokemon_back: Pokemon card showing the back
-- non_pokemon: Not a Pokemon card
-- unknown: Cannot determine
-
-VISUAL FEATURES - Important for accurate identification:
-Look for: set symbols, card series (e-Card/EX/XY/etc), border color, foil patterns
-XY-era cards CRITICAL: NEVER just say "XY" - identify the FULL set name:
-- "XY" = base set only (Xerneas/Yveltal theme)
-- "XY BREAKpoint" = has BREAK evolution cards, Gyarados theme
-- "XY BREAKthrough" = Mewtwo theme
-- "XY Fates Collide" = Zygarde theme
-- Other XY sets: Flashfire, Furious Fists, Phantom Forces, Primal Clash, Roaring Skies, Ancient Origins, Steam Siege, Evolutions
-
-IMPORTANT: Detect language and preserve original names.
-
-Format exactly:
-TCG_SEARCH_START
-{
-  "card_type": "pokemon_front/pokemon_back/non_pokemon/unknown",
-  "is_pokemon_card": true/false,
-  "card_side": "front/back/unknown",
-  "name": "exact pokemon name (include 'Prime' if detected, e.g., 'Houndoom Prime')",
-  "original_name": "pokemon name exactly as shown on card",
-  "language": "language code (en/fr/ja/de/es/etc)",
-  "set_name": "exact set name (e.g., 'Plasma Freeze', not 'Plasma Freeze set symbol')",
-  "number": "card number if visible (read carefully, e.g., H11 not H1, double-check digits)", 
-  "hp": "HP value if visible",
-  "types": ["pokemon type(s)"],
-  "set_symbol": "visible set symbol or logo",
-  "card_series": "e-Card/EX/HeartGold SoulSilver/XY/Sun Moon/Sword Shield/etc",
-  "visual_era": "vintage/classic/HGSS/modern",
-  "foil_pattern": "holo pattern description",
-  "border_color": "border color"
-}
-TCG_SEARCH_END"""
-
-    def _get_generation_config(self, processing_tier: str, retry_unlimited: bool) -> genai.types.GenerationConfig:
-        """Get tier-specific generation configuration for optimal performance."""
+    def _get_generation_config(self, retry_unlimited: bool) -> genai.types.GenerationConfig:
+        """Get optimized generation configuration for comprehensive analysis."""
         
         if retry_unlimited:
             # No token limit on retry
@@ -385,28 +330,12 @@ TCG_SEARCH_END"""
                 temperature=config.gemini_temperature,
             )
         
-        # Tier-specific token limits and settings
-        if processing_tier == "fast":
-            # Minimal tokens for speed
-            return genai.types.GenerationConfig(
-                max_output_tokens=min(150, config.gemini_max_tokens),  # Very short response
-                temperature=0.1,  # Low temperature for consistent, faster responses
-                top_p=0.8,        # Focused sampling
-            )
-        elif processing_tier == "enhanced":
-            # Maximum tokens for comprehensive analysis (reduced after removing detailed analysis)
-            return genai.types.GenerationConfig(
-                max_output_tokens=min(400, config.gemini_max_tokens),  # Optimized response length
-                temperature=config.gemini_temperature,
-                top_p=0.95,       # More creative sampling for challenging images
-            )
-        else:  # standard tier
-            # Balanced configuration
-            return genai.types.GenerationConfig(
-                max_output_tokens=config.gemini_max_tokens,
-                temperature=config.gemini_temperature,
-                top_p=0.9,
-            )
+        # Optimized configuration for comprehensive analysis with authenticity detection
+        return genai.types.GenerationConfig(
+            max_output_tokens=min(400, config.gemini_max_tokens),  # Optimized response length
+            temperature=config.gemini_temperature,
+            top_p=0.95,       # More creative sampling for challenging images
+        )
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in a text string."""

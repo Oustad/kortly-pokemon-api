@@ -83,8 +83,8 @@ class ProcessingInfo(BaseModel):
     """Information about the processing steps."""
     quality_score: float = Field(..., description="Image quality score (0-100)")
     quality_feedback: QualityFeedback = Field(..., description="Quality assessment feedback")
-    processing_tier: str = Field(..., description="Processing tier used (fast/standard/enhanced)")
-    target_time_ms: int = Field(..., description="Target processing time for tier")
+    processing_tier: str = Field(default="enhanced", description="Processing tier (always enhanced for comprehensive analysis)")
+    target_time_ms: int = Field(..., description="Target processing time")
     actual_time_ms: float = Field(..., description="Actual processing time")
     model_used: str = Field(..., description="AI model used for analysis")
     image_enhanced: bool = Field(..., description="Whether image enhancement was applied")

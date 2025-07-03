@@ -360,10 +360,11 @@ class QualityAssessment:
             'details': details or {}
         }
     
-    def get_processing_tier(self, quality_score: float) -> str:
-        """Determine processing tier based on quality score."""
-        # OVERRIDE: Always use enhanced prompt for comprehensive card analysis
-        # This ensures Prime cards, HGSS era cards, and complex cards are properly detected
-        original_tier = 'fast' if quality_score >= 80 else ('standard' if quality_score >= 50 else 'enhanced')
-        logger.info(f"🚀 Forcing enhanced prompt (was: {original_tier}, quality: {quality_score:.1f}) for comprehensive analysis")
-        return 'enhanced'
+    def get_processing_configuration(self, quality_score: float) -> Dict:
+        """Get processing configuration optimized for comprehensive card analysis."""
+        logger.info(f"🚀 Using comprehensive analysis with authenticity detection (quality: {quality_score:.1f})")
+        return {
+            'tier': 'enhanced',
+            'target_time_ms': 3000,  # Target processing time for enhanced analysis
+            'model_preference': 'comprehensive'
+        }
