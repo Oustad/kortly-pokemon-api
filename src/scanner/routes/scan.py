@@ -503,6 +503,49 @@ def is_valid_card_number(number: Optional[str]) -> bool:
     return True
 
 
+def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
+    """
+    Check if Gemini response indicates it couldn't read the card clearly.
+    
+    Args:
+        parsed_data: Parsed data from Gemini response
+        
+    Returns:
+        True if response contains vague indicators suggesting poor image quality
+    """
+    # Phrases that indicate Gemini couldn't clearly identify details
+    vague_phrases = [
+        "not visible", "not fully visible", "likely", "possibly", 
+        "appears to be", "hard to tell", "unclear", "can't see",
+        "cannot see", "difficult to see", "seems like", "looks like",
+        "maybe", "unknown", "uncertain", "not sure", "era"
+    ]
+    
+    # Check critical fields for vague indicators
+    critical_fields = ['set_name', 'number', 'name']
+    for field in critical_fields:
+        value = str(parsed_data.get(field, '')).lower()
+        if value and any(phrase in value for phrase in vague_phrases):
+            logger.info(f"🔍 Vague indicator found in {field}: '{value}'")
+            return True
+    
+    # If name is missing entirely, that's also a quality issue
+    if not parsed_data.get('name') or parsed_data.get('name', '').strip() == '':
+        logger.info("🔍 Missing card name indicates quality issue")
+        return True
+    
+    # If we have name but both set and number are vague/missing, it's likely a quality issue
+    set_name = parsed_data.get('set_name', '')
+    number = parsed_data.get('number', '')
+    
+    if (not set_name or any(phrase in set_name.lower() for phrase in vague_phrases)) and \
+       (not number or any(phrase in number.lower() for phrase in vague_phrases)):
+        logger.info("🔍 Both set and number are vague/missing - quality issue")
+        return True
+        
+    return False
+
+
 def save_processed_image(image_data: bytes, original_filename: str, stage: str = "processed") -> Optional[str]:
     """
     Save processed image to disk for testing and debugging purposes.
@@ -1153,7 +1196,12 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             # Clean name (this may be translated)
             if 'name' in search_params and search_params['name']:
                 name = str(search_params['name']).strip()
-                # Remove common artifacts
+                
+                # FIRST: Convert energy symbols to text (before cleaning removes them!)
+                from ..services.tcg_client import _normalize_energy_symbols
+                name = _normalize_energy_symbols(name)
+                
+                # THEN: Remove common artifacts
                 name = re.sub(r'\s*\(.*?\)', '', name)  # Remove parentheses
                 name = re.sub(r'[^\w\s-]', '', name)   # Remove special chars except dash
                 name = name.strip()
@@ -1407,6 +1455,42 @@ async def scan_pokemon_card(request: ScanRequest):
         logger.info(f"   🔢 Number: '{parsed_data.get('number')}'")
         logger.info(f"   ❤️ HP: '{parsed_data.get('hp')}'")
         logger.info(f"   🎨 Types: {parsed_data.get('types')}")
+        
+        # Check if Gemini response contains vague indicators suggesting poor image quality
+        if contains_vague_indicators(parsed_data):
+            logger.warning("⚠️ Gemini response contains vague indicators - image quality likely too low")
+            
+            # Get quality score from pipeline if available
+            quality_score = 0
+            if 'processing' in pipeline_result:
+                quality_score = pipeline_result['processing'].get('quality_score', 0)
+            
+            # Create quality feedback
+            quality_feedback = QualityFeedback(
+                overall="poor",
+                issues=[
+                    "Image too blurry to read card details clearly",
+                    "Card text and numbers are not legible"
+                ],
+                suggestions=[
+                    "Ensure the card is well-lit with no shadows",
+                    "Hold the camera steady and wait for auto-focus",
+                    "Try taking the photo from directly above the card",
+                    "Clean the camera lens if needed"
+                ]
+            )
+            
+            error_detail = {
+                "message": "Image quality too low to identify card details. The card text and numbers are not clearly visible.",
+                "error_type": "image_quality",
+                "quality_feedback": quality_feedback.dict(),
+                "quality_score": quality_score
+            }
+            
+            raise HTTPException(
+                status_code=400,
+                detail=json.dumps(error_detail)
+            )
         
         # Create card type info object
         card_type_info = None

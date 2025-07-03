@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -582,6 +583,9 @@ class PokemonTcgClient:
         # Handle cases where space was inserted: "Brock s Scouting" -> "Brock's Scouting"
         name = re.sub(r'\b([A-Z][a-z]+?)\s+s\s+([A-Z][a-z]+)', r"\1's \2", name)
         
+        # Handle energy symbol normalization (fix translation dropping symbols)
+        name = _normalize_energy_symbols(name)
+        
         # Handle GX/EX naming variations
         # "Espeon GX" -> "Espeon-GX"
         if " GX" in name:
@@ -626,3 +630,57 @@ class PokemonTcgClient:
             logger.info(f"🔢 Normalized card number: '{original_number}' → '{number}'")
             
         return number
+
+
+def _normalize_energy_symbols(name: str) -> str:
+    """
+    Convert energy symbols to their TCG database equivalents.
+    
+    Fixes the issue where Gemini correctly identifies "Basic ⚡ Energy" 
+    but translation drops the symbol, converting to generic "Basic Energy".
+    
+    Args:
+        name: Pokemon/card name that may contain energy symbols
+        
+    Returns:
+        Name with energy symbols converted to literal energy types
+    """
+    if not name:
+        return name
+        
+    original_name = name
+    
+    # Energy symbol to type mapping
+    energy_symbol_map = {
+        '⚡': 'Lightning',
+        '🔥': 'Fire', 
+        '💧': 'Water',
+        '🍃': 'Grass',
+        '🔮': 'Psychic',
+        '👊': 'Fighting',
+        '☠️': 'Darkness',
+        '⚙️': 'Metal',
+        '🌈': 'Rainbow',
+        # Alternative symbols that might be used
+        '💥': 'Lightning',  # Sometimes used for electric
+        '🌿': 'Grass',      # Alternative grass symbol
+        '💀': 'Darkness',   # Alternative dark symbol
+        '🔩': 'Metal',      # Alternative metal symbol
+    }
+    
+    # Replace energy symbols in common patterns
+    for symbol, energy_type in energy_symbol_map.items():
+        if symbol in name:
+            # Pattern: "Basic ⚡ Energy" -> "Basic Lightning Energy"
+            name = re.sub(f'Basic\\s*{re.escape(symbol)}\\s*Energy', f'Basic {energy_type} Energy', name)
+            
+            # Pattern: "⚡ Energy" -> "Lightning Energy"  
+            name = re.sub(f'{re.escape(symbol)}\\s*Energy', f'{energy_type} Energy', name)
+            
+            # Pattern: "⚡" -> "Lightning" (standalone symbol)
+            name = name.replace(symbol, energy_type)
+    
+    if name != original_name:
+        logger.info(f"⚡ Normalized energy symbols: '{original_name}' → '{name}'")
+    
+    return name
