@@ -513,6 +513,15 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
     Returns:
         True if response contains vague indicators suggesting poor image quality
     """
+    # Check card type first - card backs legitimately don't have names
+    card_type_info = parsed_data.get('card_type_info', {})
+    card_type = card_type_info.get('card_type', '')
+    
+    # Skip quality checks for card backs - they legitimately don't have Pokemon names
+    if card_type == 'pokemon_back':
+        logger.info("🔍 Card back detected - skipping vague indicator checks")
+        return False
+    
     # Phrases that indicate Gemini couldn't clearly identify details
     vague_phrases = [
         "not visible", "not fully visible", "likely", "possibly", 
@@ -529,7 +538,7 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
             logger.info(f"🔍 Vague indicator found in {field}: '{value}'")
             return True
     
-    # If name is missing entirely, that's also a quality issue
+    # If name is missing entirely, that's also a quality issue (but only for front cards)
     if not parsed_data.get('name') or parsed_data.get('name', '').strip() == '':
         logger.info("🔍 Missing card name indicates quality issue")
         return True
