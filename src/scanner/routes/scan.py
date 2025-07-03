@@ -1798,6 +1798,19 @@ async def scan_pokemon_card(request: ScanRequest):
                     # Override success to false to prevent wrong matches
                     error_message = "Pokemon card appears heavily damaged or scratched - skipping search to prevent incorrect identification"
                     
+                    # Create processing info for early return
+                    processing_info = ProcessingInfo(
+                        quality_score=quality_score,
+                        quality_feedback=None,  # Not available in early return
+                        processing_tier=processing_info_dict.get('processing_tier', 'enhanced'),
+                        target_time_ms=processing_info_dict.get('target_time_ms', 0),
+                        actual_time_ms=int((time.time() - start_time) * 1000),
+                        model_used=processing_info_dict.get('model_used', 'gemini'),
+                        image_enhanced=processing_info_dict.get('image_enhanced', True),
+                        performance_rating=processing_info_dict.get('performance_rating', 'good'),
+                        timing_breakdown=processing_info_dict.get('timing_breakdown', {})
+                    )
+                    
                     # Prepare response with no TCG matches
                     response = ScanResponse(
                         success=False,
