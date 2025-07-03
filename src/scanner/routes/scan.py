@@ -422,6 +422,87 @@ def _extract_set_name_from_symbol(set_symbol_desc: str) -> Optional[str]:
     return None
 
 
+def is_valid_set_name(set_name: Optional[str]) -> bool:
+    """
+    Check if set name is valid for TCG API query.
+    
+    Args:
+        set_name: Set name from Gemini output
+        
+    Returns:
+        True if valid for API query, False otherwise
+    """
+    if not set_name or not isinstance(set_name, str):
+        return False
+    
+    # Invalid phrases that indicate Gemini couldn't identify the set
+    invalid_phrases = [
+        "not visible", "likely", "but", "era", "possibly", "unknown",
+        "can't see", "cannot see", "unclear", "maybe", "appears to be",
+        "looks like", "seems like", "hard to tell", "difficult to see"
+    ]
+    
+    set_lower = set_name.lower()
+    
+    # Check for invalid phrases
+    if any(phrase in set_lower for phrase in invalid_phrases):
+        return False
+    
+    # Check for overly long descriptions (real set names are typically < 50 chars)
+    if len(set_name) > 50:
+        return False
+    
+    # Check for commas (indicates descriptive text)
+    if "," in set_name:
+        return False
+    
+    return True
+
+
+def is_valid_card_number(number: Optional[str]) -> bool:
+    """
+    Check if card number is valid for TCG API query.
+    
+    Args:
+        number: Card number from Gemini output
+        
+    Returns:
+        True if valid for API query, False otherwise
+    """
+    if not number or not isinstance(number, str):
+        return False
+    
+    # Remove whitespace
+    number = number.strip()
+    
+    # Invalid phrases that indicate Gemini couldn't identify the number
+    invalid_phrases = [
+        "not visible", "unknown", "unclear", "can't see", "cannot see",
+        "hard to tell", "difficult", "n/a", "none", "not found"
+    ]
+    
+    number_lower = number.lower()
+    
+    # Check for invalid phrases
+    if any(phrase in number_lower for phrase in invalid_phrases):
+        return False
+    
+    # Check for spaces in the middle (indicates descriptive text)
+    if " " in number:
+        return False
+    
+    # Allow alphanumeric with optional letters (e.g., "123", "SV001", "177a", "TG12")
+    # Also allow hyphens for promos (e.g., "SWSH001", "XY-P001")
+    if not re.match(r'^[A-Za-z0-9\-]+$', number):
+        return False
+    
+    # Must have at least one digit
+    if not any(c.isdigit() for c in number):
+        return False
+    
+    return True
+
+
 def save_processed_image(image_data: bytes, original_filename: str, stage: str = "processed") -> Optional[str]:
     """
     Save processed image to disk for testing and debugging purposes.
@@ -966,14 +1047,42 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
     Parse Gemini's response to extract structured TCG search parameters.
     
     Args:
-        gemini_response: Raw text response from Gemini with TCG_SEARCH_START/END markers
+        gemini_response: Raw text response from Gemini with various possible formats
         
     Returns:
         Dictionary with parsed search parameters
     """
-    # First try to extract structured JSON from TCG_SEARCH markers
+    # Try multiple parsing strategies in order of preference
+    
+    # Strategy 1: Extract structured JSON from TCG_SEARCH markers (preferred format)
     tcg_pattern = r'TCG_SEARCH_START\s*(\{.*?\})\s*TCG_SEARCH_END'
     match = re.search(tcg_pattern, gemini_response, re.DOTALL | re.IGNORECASE)
+    
+    if match:
+        logger.info("📋 Found TCG_SEARCH_START/END format")
+    else:
+        # Strategy 2: Extract JSON from markdown code blocks
+        markdown_pattern = r'```json\s*(\{.*?\})\s*```'
+        match = re.search(markdown_pattern, gemini_response, re.DOTALL | re.IGNORECASE)
+        
+        if match:
+            logger.info("📋 Found markdown ```json format")
+        else:
+            # Strategy 3: Extract raw JSON object from anywhere in response
+            json_pattern = r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})'
+            matches = re.findall(json_pattern, gemini_response, re.DOTALL)
+            
+            # Find the largest JSON object (most likely to be complete)
+            if matches:
+                match_obj = max(matches, key=len)
+                # Create a fake match object for consistency
+                class FakeMatch:
+                    def group(self, n):
+                        return match_obj
+                match = FakeMatch()
+                logger.info("📋 Found raw JSON format")
+            else:
+                match = None
     
     if match:
         try:
@@ -1349,27 +1458,39 @@ async def scan_pokemon_card(request: ScanRequest):
             all_search_results = []  # Collect results from all strategies
             
             # Strategy 1: HIGHEST PRIORITY - Set + Number + Name (exact match)
+            # Only run if both set name and number are valid
             if parsed_data.get("set_name") and parsed_data.get("number"):
-                logger.info("🎯 Strategy 1: Set + Number + Name (PRIORITY)")
-                logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}'")
-                strategy1_results = await tcg_client.search_cards(
-                    name=parsed_data["name"],
-                    set_name=parsed_data.get("set_name"),
-                    number=parsed_data.get("number"),
-                    page_size=5,
-                    fuzzy=False,
-                )
-                if strategy1_results.get("data"):
-                    all_search_results.extend(strategy1_results["data"])
-                    logger.info(f"✅ Strategy 1 found {len(strategy1_results['data'])} exact matches")
-                    for result in strategy1_results["data"][:3]:  # Log first 3 matches
-                        logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
-                else:
-                    logger.info("   ❌ Strategy 1: No exact matches found")
+                set_valid = is_valid_set_name(parsed_data.get("set_name"))
+                number_valid = is_valid_card_number(parsed_data.get("number"))
                 
-                search_attempts.append({
-                    "strategy": "set_number_name_exact",
-                    "query": {
+                if set_valid and number_valid:
+                    logger.info("🎯 Strategy 1: Set + Number + Name (PRIORITY)")
+                    logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}'")
+                    strategy1_results = await tcg_client.search_cards(
+                        name=parsed_data["name"],
+                        set_name=parsed_data.get("set_name"),
+                        number=parsed_data.get("number"),
+                        page_size=5,
+                        fuzzy=False,
+                    )
+                    if strategy1_results.get("data"):
+                        all_search_results.extend(strategy1_results["data"])
+                        logger.info(f"✅ Strategy 1 found {len(strategy1_results['data'])} exact matches")
+                        for result in strategy1_results["data"][:3]:  # Log first 3 matches
+                            logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                    else:
+                        logger.info("   ❌ Strategy 1: No exact matches found")
+                else:
+                    logger.info(f"   ⚠️ Strategy 1 skipped: Invalid parameters - Set valid: {set_valid}, Number valid: {number_valid}")
+                    if not set_valid:
+                        logger.info(f"      Invalid set: '{parsed_data.get('set_name')}'")
+                    if not number_valid:
+                        logger.info(f"      Invalid number: '{parsed_data.get('number')}'")
+                
+                if set_valid and number_valid:
+                    search_attempts.append({
+                        "strategy": "set_number_name_exact",
+                        "query": {
                         "name": parsed_data["name"],
                         "set_name": parsed_data.get("set_name"),
                         "number": parsed_data.get("number"),
@@ -1377,70 +1498,116 @@ async def scan_pokemon_card(request: ScanRequest):
                     "results": len(strategy1_results.get("data", [])),
                 })
                 
-                # Strategy 1.5: Set Family + Number + Name (for cases like "XY" -> "XY BREAKpoint")
-                if len(all_search_results) == 0 and parsed_data.get("set_name") and parsed_data.get("number"):
-                    set_family = _get_set_family(parsed_data.get("set_name"))
-                    if set_family:
-                        logger.info(f"🔄 Strategy 1.5: Set Family expansion for '{parsed_data.get('set_name')}'")
-                        logger.info(f"   📚 Set family contains: {set_family}")
-                        for family_set in set_family:
-                            logger.info(f"   🔍 Searching in family set: '{family_set}'")
-                            strategy1_5_results = await tcg_client.search_cards(
-                                name=parsed_data["name"],
-                                set_name=family_set,
-                                number=parsed_data.get("number"),
-                                page_size=3,
-                                fuzzy=False,
-                            )
-                            if strategy1_5_results.get("data"):
-                                new_results = [card for card in strategy1_5_results["data"] 
-                                             if not any(existing["id"] == card["id"] for existing in all_search_results)]
-                                all_search_results.extend(new_results)
-                                logger.info(f"✅ Strategy 1.5 found {len(new_results)} matches in {family_set}")
-                                for result in new_results[:2]:  # Log first 2 matches
-                                    logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
-                            else:
-                                logger.info(f"   ❌ No matches in '{family_set}'")
-                                
+                # Strategy 1.25: Cross-set Number + Name (when Gemini gets set wrong but number right)
+                if len(all_search_results) == 0 and parsed_data.get("number") and parsed_data.get("name"):
+                    # Only run if number is valid
+                    if is_valid_card_number(parsed_data.get("number")):
+                        logger.info("🔄 Strategy 1.25: Cross-set Number + Name (ignore potentially wrong set)")
+                        logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', number='{parsed_data.get('number')}'")
+                        strategy1_25_results = await tcg_client.search_cards(
+                            name=parsed_data["name"],
+                            number=parsed_data.get("number"),
+                            page_size=10,
+                            fuzzy=False,
+                        )
+                        if strategy1_25_results.get("data"):
+                            new_results = [card for card in strategy1_25_results["data"] 
+                                         if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                            all_search_results.extend(new_results)
+                            logger.info(f"✅ Strategy 1.25 found {len(new_results)} cross-set matches")
+                            
+                            # Log which set we actually found the card in
+                            if new_results:
+                                found_set = new_results[0].get("set", {}).get("name", "Unknown")
+                                original_set = parsed_data.get("set_name", "Unknown")
+                                if found_set != original_set:
+                                    logger.info(f"   🎯 Set correction: '{original_set}' → '{found_set}'")
+                        else:
+                            logger.info("   ❌ Strategy 1.25: No cross-set matches found")
+                        
                         search_attempts.append({
-                            "strategy": "set_family_number_name",
+                            "strategy": "cross_set_number_name",
                             "query": {
                                 "name": parsed_data["name"],
-                                "set_family": set_family,
                                 "number": parsed_data.get("number"),
                             },
-                            "results": len([r for r in all_search_results if "strategy1_5" in str(r)]),
+                            "results": len(strategy1_25_results.get("data", [])),
                         })
+                    else:
+                        logger.info(f"   ⚠️ Strategy 1.25 skipped: Invalid number '{parsed_data.get('number')}'")
+                
+                # Strategy 1.5: Set Family + Number + Name (for cases like "XY" -> "XY BREAKpoint")
+                if len(all_search_results) == 0 and parsed_data.get("set_name") and parsed_data.get("number"):
+                    # Check if number is valid before using set family expansion
+                    if is_valid_card_number(parsed_data.get("number")):
+                        set_family = _get_set_family(parsed_data.get("set_name"))
+                        if set_family:
+                            logger.info(f"🔄 Strategy 1.5: Set Family expansion for '{parsed_data.get('set_name')}'")
+                            logger.info(f"   📚 Set family contains: {set_family}")
+                            for family_set in set_family:
+                                logger.info(f"   🔍 Searching in family set: '{family_set}'")
+                                strategy1_5_results = await tcg_client.search_cards(
+                                    name=parsed_data["name"],
+                                    set_name=family_set,
+                                    number=parsed_data.get("number"),
+                                    page_size=3,
+                                    fuzzy=False,
+                                )
+                                if strategy1_5_results.get("data"):
+                                    new_results = [card for card in strategy1_5_results["data"] 
+                                                 if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                                    all_search_results.extend(new_results)
+                                    logger.info(f"✅ Strategy 1.5 found {len(new_results)} matches in {family_set}")
+                                    for result in new_results[:2]:  # Log first 2 matches
+                                        logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                                else:
+                                    logger.info(f"   ❌ No matches in '{family_set}'")
+                                
+                            search_attempts.append({
+                                "strategy": "set_family_number_name",
+                                "query": {
+                                    "name": parsed_data["name"],
+                                    "set_family": set_family,
+                                    "number": parsed_data.get("number"),
+                                },
+                                "results": len([r for r in all_search_results if "strategy1_5" in str(r)]),
+                            })
+                    else:
+                        logger.info(f"   ⚠️ Strategy 1.5 skipped: Invalid number '{parsed_data.get('number')}'")
             
             # Strategy 2: Set + Name (without number constraint)
             if parsed_data.get("set_name"):
-                logger.info("🔄 Strategy 2: Set + Name (no number)")
-                logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}'")
-                strategy2_results = await tcg_client.search_cards(
-                    name=parsed_data["name"],
-                    set_name=parsed_data.get("set_name"),
-                    page_size=10,
-                    fuzzy=False,
-                )
-                if strategy2_results.get("data"):
-                    # Only add if not already found in strategy 1
-                    new_results = [card for card in strategy2_results["data"] 
-                                 if not any(existing["id"] == card["id"] for existing in all_search_results)]
-                    all_search_results.extend(new_results)
-                    logger.info(f"✅ Strategy 2 found {len(new_results)} additional matches")
-                    for result in new_results[:3]:  # Log first 3 new matches
-                        logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                # Only run if set name is valid
+                if is_valid_set_name(parsed_data.get("set_name")):
+                    logger.info("🔄 Strategy 2: Set + Name (no number)")
+                    logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}'")
+                    strategy2_results = await tcg_client.search_cards(
+                        name=parsed_data["name"],
+                        set_name=parsed_data.get("set_name"),
+                        page_size=10,
+                        fuzzy=False,
+                    )
+                    if strategy2_results.get("data"):
+                        # Only add if not already found in strategy 1
+                        new_results = [card for card in strategy2_results["data"] 
+                                     if not any(existing["id"] == card["id"] for existing in all_search_results)]
+                        all_search_results.extend(new_results)
+                        logger.info(f"✅ Strategy 2 found {len(new_results)} additional matches")
+                        for result in new_results[:3]:  # Log first 3 new matches
+                            logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                    else:
+                        logger.info("   ❌ Strategy 2: No set+name matches found")
+                    
+                    search_attempts.append({
+                        "strategy": "set_name_only",
+                        "query": {
+                            "name": parsed_data["name"],
+                            "set_name": parsed_data.get("set_name"),
+                        },
+                        "results": len(strategy2_results.get("data", [])),
+                    })
                 else:
-                    logger.info("   ❌ Strategy 2: No set+name matches found")
-                
-                search_attempts.append({
-                    "strategy": "set_name_only",
-                    "query": {
-                        "name": parsed_data["name"],
-                        "set_name": parsed_data.get("set_name"),
-                    },
-                    "results": len(strategy2_results.get("data", [])),
-                })
+                    logger.info(f"   ⚠️ Strategy 2 skipped: Invalid set name '{parsed_data.get('set_name')}'")
             
             # Strategy 3: Name + HP (cross-set search with HP validation)
             if parsed_data.get("hp") and len(all_search_results) < 5:
@@ -1777,6 +1944,7 @@ async def scan_pokemon_card(request: ScanRequest):
             best_match=best_match_card,
             processing=processing_info,
             cost_info=cost_info,
+            processed_image_filename=Path(processed_path).name if processed_path else None,
             error=error_message,
         )
         

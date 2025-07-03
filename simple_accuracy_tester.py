@@ -14,11 +14,16 @@ import asyncio
 import argparse
 import base64
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
 import aiohttp
+
+# Configure logging
+logging.basicConfig(level=logging.WARNING)  # Only show warnings and errors
+logger = logging.getLogger(__name__)
 
 def load_image_as_base64(image_path: Path) -> str:
     """Load an image file and convert to base64."""
@@ -89,12 +94,24 @@ def categorize_result(result: Dict[str, Any]) -> str:
     else:
         message = error_msg
     
-    # Check for expected cases
-    if "Card back detected" in message:
+    # Check for expected cases (case-insensitive and robust)
+    message_lower = message.lower()
+    
+    if "card back detected" in message_lower:
         return "expected_non_identification"
-    elif "quality too low" in message:
+    elif "quality too low" in message_lower:
         return "expected_non_identification"
-    elif "Non-Pokemon card detected" in message:
+    elif "non-pokemon card detected" in message_lower:
+        return "expected_non_identification"
+    elif "pokemon card identified but no tcg database matches found" in message_lower:
+        return "expected_non_identification"
+    elif "no tcg database matches found" in message_lower:
+        return "expected_non_identification"
+    elif "tcg database matches found" in message_lower and "no" in message_lower:
+        return "expected_non_identification"
+    elif "foreign language" in message_lower:
+        return "expected_non_identification"
+    elif "japanese card" in message_lower or "korean card" in message_lower:
         return "expected_non_identification"
     else:
         return "failed"
@@ -110,8 +127,12 @@ def extract_top_matches(result: Dict[str, Any]) -> List[Dict[str, Any]]:
     if "all_tcg_matches" in response and response["all_tcg_matches"]:
         matches = []
         for match_score in response["all_tcg_matches"][:3]:  # Top 3
-            card = match_score.get("card", {})
-            images = card.get("images", {})
+            if not match_score:  # Skip None entries
+                continue
+            card = match_score.get("card", {}) if match_score else {}
+            if not card:  # Skip if card is None
+                continue
+            images = card.get("images", {}) if card else {}
             matches.append({
                 "name": card.get("name", "Unknown"),
                 "set_name": card.get("set_name", ""),
@@ -132,7 +153,9 @@ def extract_top_matches(result: Dict[str, Any]) -> List[Dict[str, Any]]:
     # Fallback: extract best match only
     elif "best_match" in response and response["best_match"]:
         card = response["best_match"]
-        images = card.get("images", {})
+        if not card:  # Skip if card is None
+            return []
+        images = card.get("images", {}) if card else {}
         return [{
             "name": card.get("name", "Unknown"),
             "set_name": card.get("set_name", ""),
@@ -154,105 +177,157 @@ def extract_top_matches(result: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
     """Extract relevant card information from scan result."""
-    category = categorize_result(result)
-    
-    if category == "success":
-        response = result["response"]
+    try:
+        category = categorize_result(result)
         
-        # Handle detailed response format (new primary format)
-        if "card_identification" in response and "processing" in response:
-            card_id = response["card_identification"]
-            structured_data = card_id.get("structured_data", {})
-            processing = response.get("processing", {})
+        if category == "success":
+            response = result.get("response")
+            if not response:
+                return {
+                    "category": "failed",
+                    "card_name": "ERROR",
+                    "set_name": "",
+                    "quality_score": 0,
+                    "error_message": "No response data",
+                    "top_matches": [],
+                    "processed_image_filename": None
+                }
+            
+            # Check if we have any TCG matches
+            all_tcg_matches = response.get("all_tcg_matches", [])
             best_match = response.get("best_match")
             
-            # Get primary card name - prefer best match, fall back to structured data
-            primary_name = "Unknown"
-            primary_set = ""
-            if best_match:
-                primary_name = best_match.get("name", primary_name)
-                primary_set = best_match.get("set_name", "")
-            elif structured_data:
-                primary_name = structured_data.get("name", primary_name)
-                primary_set = structured_data.get("set_name", "")
+            # If success but no matches, recategorize as expected_non_identification
+            if (all_tcg_matches is None or len(all_tcg_matches) == 0) and best_match is None:
+                category = "expected_non_identification"
+            
+            # Handle detailed response format (new primary format)
+            if "card_identification" in response and "processing" in response:
+                card_id = response["card_identification"]
+                structured_data = card_id.get("structured_data", {}) if card_id else {}
+                processing = response.get("processing", {}) if response else {}
+                best_match = response.get("best_match") if response else None
+                
+                # Get primary card name - prefer best match, fall back to structured data
+                primary_name = "Unknown"
+                primary_set = ""
+                if best_match and isinstance(best_match, dict):
+                    primary_name = best_match.get("name", primary_name)
+                    primary_set = best_match.get("set_name", "")
+                elif structured_data and isinstance(structured_data, dict):
+                    primary_name = structured_data.get("name", primary_name)
+                    primary_set = structured_data.get("set_name", "")
+                
+                # Set error message if no matches found
+                error_message = ""
+                if category == "expected_non_identification":
+                    error_message = "Pokemon card identified but no TCG database matches found"
+                
+                return {
+                    "category": category,
+                    "card_name": primary_name,
+                    "set_name": primary_set,
+                    "quality_score": processing.get("quality_score", 0),
+                    "error_message": error_message,
+                    "top_matches": extract_top_matches(result),
+                    "processed_image_filename": response.get("processed_image_filename")
+                }
+            
+            # Handle simplified response format (fallback)
+            elif "name" in response and "quality_score" in response:
+                return {
+                    "category": category,
+                    "card_name": response.get("name", "Unknown"),
+                    "set_name": response.get("set_name", ""),
+                    "quality_score": response.get("quality_score", 0),
+                    "error_message": "",
+                    "top_matches": [],
+                    "processed_image_filename": response.get("processed_image_filename")
+                }
+            
+            else:
+                return {
+                    "category": "failed",
+                    "card_name": "UNKNOWN_FORMAT",
+                    "set_name": "",
+                    "quality_score": 0,
+                    "error_message": "Unexpected response format",
+                    "top_matches": [],
+                    "processed_image_filename": None
+                }
+        
+        elif category == "expected_non_identification":
+            # Parse the error message for display
+            error_msg = str(result.get("error", ""))
+            if error_msg.startswith("{"):
+                try:
+                    import json
+                    error_obj = json.loads(error_msg)
+                    display_message = error_obj.get("message", error_msg)
+                except:
+                    display_message = error_msg
+            else:
+                display_message = error_msg
             
             return {
                 "category": category,
-                "card_name": primary_name,
-                "set_name": primary_set,
-                "quality_score": processing.get("quality_score", 0),
-                "error_message": "",
-                "top_matches": extract_top_matches(result)
+                "card_name": "N/A (Expected)",
+                "set_name": "",
+                "quality_score": 0,  # We don't have quality score for these
+                "error_message": display_message,
+                "top_matches": [],
+                "processed_image_filename": None
             }
         
-        # Handle simplified response format (fallback)
-        elif "name" in response and "quality_score" in response:
+        else:  # failed
             return {
                 "category": category,
-                "card_name": response.get("name", "Unknown"),
-                "set_name": response.get("set_name", ""),
-                "quality_score": response.get("quality_score", 0),
-                "error_message": "",
-                "top_matches": []
-            }
-        
-        else:
-            return {
-                "category": "failed",
-                "card_name": "UNKNOWN_FORMAT",
+                "card_name": "ERROR",
                 "set_name": "",
                 "quality_score": 0,
-                "error_message": "Unexpected response format",
-                "top_matches": []
+                "error_message": result.get("error", "Unknown error"),
+                "top_matches": [],
+                "processed_image_filename": None
             }
     
-    elif category == "expected_non_identification":
-        # Parse the error message for display
-        error_msg = str(result.get("error", ""))
-        if error_msg.startswith("{"):
-            try:
-                import json
-                error_obj = json.loads(error_msg)
-                display_message = error_obj.get("message", error_msg)
-            except:
-                display_message = error_msg
-        else:
-            display_message = error_msg
-        
+    except Exception as e:
+        # Handle any unexpected errors during parsing
+        logger.error(f"Error extracting card info: {str(e)}")
         return {
-            "category": category,
-            "card_name": "N/A (Expected)",
-            "set_name": "",
-            "quality_score": 0,  # We don't have quality score for these
-            "error_message": display_message,
-            "top_matches": []
-        }
-    
-    else:  # failed
-        return {
-            "category": category,
-            "card_name": "ERROR",
+            "category": "failed",
+            "card_name": "PARSE_ERROR",
             "set_name": "",
             "quality_score": 0,
-            "error_message": result.get("error", "Unknown error"),
-            "top_matches": []
+            "error_message": f"Failed to parse response: {str(e)}",
+            "top_matches": [],
+            "processed_image_filename": None
         }
 
-def generate_html_report(results: List[Dict[str, Any]], output_file: str):
+def generate_html_report(results: List[Dict[str, Any]], output_file: str, api_url: str = "http://localhost:8000"):
     """Generate an enhanced HTML report with top 3 matches and images."""
     
-    # Calculate stats by category
+    # Detect processed images directory
+    processed_images_dir = Path("processed_images")
+    if not processed_images_dir.exists():
+        # Try relative to script location
+        script_dir = Path(__file__).parent
+        processed_images_dir = script_dir / "processed_images"
+    
+    # Get absolute path for file:// URLs
+    processed_images_abs_path = processed_images_dir.resolve()
+    
+    # Calculate stats by category (with safety checks)
     total_images = len(results)
-    successful_scans = sum(1 for r in results if r["card_info"]["category"] == "success")
-    expected_non_id = sum(1 for r in results if r["card_info"]["category"] == "expected_non_identification")
-    failed_scans = sum(1 for r in results if r["card_info"]["category"] == "failed")
+    successful_scans = sum(1 for r in results if r.get("card_info", {}).get("category") == "success")
+    expected_non_id = sum(1 for r in results if r.get("card_info", {}).get("category") == "expected_non_identification")
+    failed_scans = sum(1 for r in results if r.get("card_info", {}).get("category") == "failed")
     
     # Calculate success rate (excluding expected non-identification)
     identifiable_images = total_images - expected_non_id
     success_rate = (successful_scans / identifiable_images * 100) if identifiable_images > 0 else 0
     
-    avg_processing_time = sum(r["processing_time_ms"] for r in results) / total_images if results else 0
-    avg_quality_score = sum(r["card_info"]["quality_score"] for r in results if r["card_info"]["category"] == "success") / successful_scans if successful_scans > 0 else 0
+    avg_processing_time = sum(r.get("processing_time_ms", 0) for r in results) / total_images if results else 0
+    avg_quality_score = sum(r.get("card_info", {}).get("quality_score", 0) for r in results if r.get("card_info", {}).get("category") == "success") / successful_scans if successful_scans > 0 else 0
     
     html_content = f"""
 <!DOCTYPE html>
@@ -383,8 +458,8 @@ def generate_html_report(results: List[Dict[str, Any]], output_file: str):
 
     # Generate individual test results
     for result in results:
-        card_info = result["card_info"]
-        category = card_info["category"]
+        card_info = result.get("card_info", {})
+        category = card_info.get("category", "failed")
         
         # Status styling
         if category == "success":
@@ -397,27 +472,48 @@ def generate_html_report(results: List[Dict[str, Any]], output_file: str):
             status_class = "status-failed"
             status_text = "❌ Failed"
         
-        quality_display = f"{card_info['quality_score']:.1f}" if card_info['quality_score'] > 0 else "N/A"
+        quality_display = f"{card_info.get('quality_score', 0):.1f}" if card_info.get('quality_score', 0) > 0 else "N/A"
         
         html_content += f"""
         <div class="test-result">
             <div class="result-header">
-                <div class="result-title">{result['filename']}</div>
+                <div class="result-title">{result.get('filename', 'unknown')}</div>
                 <div class="result-status {status_class}">{status_text}</div>
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px; align-items: start;">
                 <div>
                     <div class="uploaded-image">
-                        <h4>📄 Uploaded Image</h4>
+                        <h4>📄 Original Image</h4>
                         <div style="color: #6b7280; font-size: 0.9rem; margin-bottom: 10px;">
-                            Quality: {quality_display} • Processing: {result['processing_time_ms']:.0f}ms
+                            Quality: {quality_display} • Processing: {result.get('processing_time_ms', 0):.0f}ms
                         </div>
                         <div style="background: #f3f4f6; padding: 40px 20px; border: 2px dashed #d1d5db; border-radius: 8px; color: #6b7280;">
-                            📁 {result['filename']}<br/>
+                            📁 {result.get('filename', 'unknown')}<br/>
                             <small>Original image not embedded</small>
                         </div>
-                    </div>
+                    </div>"""
+        
+        # Add processed image if available
+        processed_filename = card_info.get("processed_image_filename")
+        if processed_filename:
+            html_content += f"""
+                    <div class="uploaded-image" style="margin-top: 20px;">
+                        <h4>🔧 Processed Image</h4>
+                        <div style="color: #6b7280; font-size: 0.9rem; margin-bottom: 10px;">
+                            Enhanced for AI analysis
+                        </div>
+                        <img src="file://{processed_images_abs_path}/{processed_filename}" 
+                             alt="Processed {result.get('filename', 'unknown')}" 
+                             style="max-width: 300px; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.15);"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div style="background: #fee2e2; padding: 40px 20px; border: 2px dashed #fca5a5; border-radius: 8px; color: #991b1b; display: none;">
+                            ❌ Processed image not found<br/>
+                            <small>File: {processed_images_abs_path}/{processed_filename}</small>
+                        </div>
+                    </div>"""
+        
+        html_content += """
                 </div>
                 
                 <div class="comparison-section">"""
@@ -566,7 +662,7 @@ async def main():
     
     # Generate report
     print(f"\n📊 Generating report: {args.output}")
-    generate_html_report(results, args.output)
+    generate_html_report(results, args.output, args.api_url)
     
     # Print summary
     successful_scans = sum(1 for r in results if r["card_info"]["category"] == "success")

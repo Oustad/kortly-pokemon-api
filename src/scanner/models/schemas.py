@@ -122,6 +122,7 @@ class ScanResponse(BaseModel):
     best_match: Optional[PokemonCard] = Field(None, description="Best matching card")
     processing: ProcessingInfo = Field(..., description="Processing details and quality metrics")
     cost_info: Optional[CostInfo] = Field(None, description="Cost tracking information")
+    processed_image_filename: Optional[str] = Field(None, description="Filename of saved processed image")
     error: Optional[str] = Field(None, description="Error message if scan failed")
 
 

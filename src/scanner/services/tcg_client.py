@@ -487,6 +487,101 @@ class PokemonTcgClient:
             name = name_translations[name]
             logger.info(f"🌍 Translated Pokemon name: '{original_name}' → '{name}'")
         
+        # Handle apostrophe variations (comprehensive fix)
+        import re
+        
+        # Normalize apostrophe characters first (ASCII vs Unicode)
+        name = re.sub(r'[''`]', "'", name)
+        
+        # Pokemon names that should have apostrophes
+        pokemon_apostrophes = {
+            'farfetchd': "Farfetch'd",
+            'farfetch d': "Farfetch'd",
+            'sirfetchd': "Sirfetch'd", 
+            'sirfetch d': "Sirfetch'd",
+        }
+        
+        # Apply Pokemon apostrophe fixes first
+        name_lower = name.lower()
+        for incorrect, correct in pokemon_apostrophes.items():
+            if incorrect in name_lower:
+                # Use word boundaries to avoid partial matches
+                pattern = r'\b' + re.escape(incorrect) + r'\b'
+                name = re.sub(pattern, correct, name, flags=re.IGNORECASE)
+                break
+        
+        # Known trainer names that should have apostrophes (comprehensive list)
+        trainer_possessives = {
+            'team rockets': "Team Rocket's",
+            'team rocket s': "Team Rocket's", 
+            'brocks': "Brock's",
+            'brock s': "Brock's",
+            'mistys': "Misty's", 
+            'misty s': "Misty's",
+            'giovannis': "Giovanni's",
+            'giovanni s': "Giovanni's",
+            'lt surges': "Lt. Surge's",
+            'lt surge s': "Lt. Surge's",
+            'lieutenant surges': "Lt. Surge's",
+            'erikas': "Erika's",
+            'erika s': "Erika's",
+            'kogas': "Koga's",
+            'koga s': "Koga's",
+            'sabrinas': "Sabrina's",
+            'sabrina s': "Sabrina's",
+            'blaines': "Blaine's",
+            'blaine s': "Blaine's",
+            'blues': "Blue's",
+            'blue s': "Blue's",
+            'reds': "Red's",
+            'red s': "Red's",
+            'greens': "Green's",
+            'green s': "Green's",
+            'bills': "Bill's",
+            'bill s': "Bill's",
+            'professor oaks': "Professor Oak's",
+            'professor oak s': "Professor Oak's",
+            'professor elms': "Professor Elm's",
+            'professor elm s': "Professor Elm's",
+            'professor birches': "Professor Birch's",
+            'professor birch s': "Professor Birch's",
+            'professor rowans': "Professor Rowan's",
+            'professor rowan s': "Professor Rowan's",
+            'professor junipers': "Professor Juniper's",
+            'professor juniper s': "Professor Juniper's",
+            'professor sycamores': "Professor Sycamore's",
+            'professor sycamore s': "Professor Sycamore's",
+            'professor kukuis': "Professor Kukui's",
+            'professor kukui s': "Professor Kukui's",
+            'professor magnolias': "Professor Magnolia's",
+            'professor magnolia s': "Professor Magnolia's",
+            'lysandres': "Lysandre's",
+            'lysandre s': "Lysandre's",
+            'flannery s': "Flannery's",
+            'winona s': "Winona's",
+            'norman s': "Norman's",
+            'watson s': "Wattson's",
+            'roxanne s': "Roxanne's",
+        }
+        
+        # Apply known trainer name fixes
+        name_lower = name.lower()  # Refresh after Pokemon apostrophe fixes
+        for incorrect, correct in trainer_possessives.items():
+            if incorrect in name_lower:
+                # Use word boundaries to avoid partial matches
+                pattern = r'\b' + re.escape(incorrect) + r'\b'
+                name = re.sub(pattern, correct, name, flags=re.IGNORECASE)
+                break
+        
+        # General possessive pattern fix for remaining cases
+        # Pattern: Word ending in 's' + space + another word (likely possessive)
+        # "Brocks Scouting" -> "Brock's Scouting"
+        # "Bills PC" -> "Bill's PC" 
+        name = re.sub(r'\b([A-Z][a-z]+?)s\s+([A-Z][a-z]+)', r"\1's \2", name)
+        
+        # Handle cases where space was inserted: "Brock s Scouting" -> "Brock's Scouting"
+        name = re.sub(r'\b([A-Z][a-z]+?)\s+s\s+([A-Z][a-z]+)', r"\1's \2", name)
+        
         # Handle GX/EX naming variations
         # "Espeon GX" -> "Espeon-GX"
         if " GX" in name:
