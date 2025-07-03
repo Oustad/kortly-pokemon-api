@@ -65,6 +65,7 @@ class QualityAssessment:
             resolution_score = self._assess_resolution(pil_img)
             lighting_score = self._assess_lighting(img)
             card_detection_score = self._assess_card_presence(img)
+            foil_assessment = self._assess_foil_interference(img)
             
             # Debug logging for quality scores
             logger.info(f"🔍 Quality Assessment Breakdown:")
@@ -72,6 +73,7 @@ class QualityAssessment:
             logger.info(f"   🌟 Blur/Sharpness: {blur_score:.1f}/100")
             logger.info(f"   💡 Lighting: {lighting_score:.1f}/100")
             logger.info(f"   🎴 Card Detection: {card_detection_score:.1f}/100")
+            logger.info(f"   ✨ Foil Interference: {foil_assessment['foil_interference_score']:.1f}/100 ({foil_assessment['interference_level']})")
             
             # Calculate composite score
             composite_score = self._calculate_composite_score({
@@ -90,7 +92,7 @@ class QualityAssessment:
                 'lighting': lighting_score, 
                 'card_detection': card_detection_score,
                 'composite': composite_score
-            })
+            }, foil_assessment)
             
             return self._create_quality_result(
                 composite_score,
@@ -100,6 +102,7 @@ class QualityAssessment:
                     'resolution_score': resolution_score,
                     'lighting_score': lighting_score,
                     'card_detection_score': card_detection_score,
+                    'foil_assessment': foil_assessment,
                     'image_size': pil_img.size,
                     'feedback': feedback
                 }
@@ -238,19 +241,72 @@ class QualityAssessment:
             logger.warning(f"Card detection failed: {e}")
             return 60.0  # Default reasonable score
     
+    def _assess_foil_interference(self, img: np.ndarray) -> Dict:
+        """Detect foil/holographic patterns that may interfere with text reading."""
+        try:
+            # Convert to grayscale for analysis
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # Detect high-frequency variations (typical of foil patterns)
+            # Calculate local standard deviation to find high-variance areas
+            kernel = np.ones((5, 5), np.float32) / 25
+            mean = cv2.filter2D(gray.astype(np.float32), -1, kernel)
+            sqr_mean = cv2.filter2D((gray.astype(np.float32))**2, -1, kernel)
+            variance = sqr_mean - mean**2
+            std_dev = np.sqrt(np.maximum(variance, 0))
+            
+            # Calculate metrics for foil detection
+            high_variance_pixels = np.sum(std_dev > 25)  # Areas with high texture variation
+            total_pixels = gray.shape[0] * gray.shape[1]
+            variance_ratio = high_variance_pixels / total_pixels
+            
+            # Detect bright spots (reflections)
+            bright_spots = np.sum(gray > 240)
+            brightness_ratio = bright_spots / total_pixels
+            
+            # Calculate overall foil interference score
+            # High variance + bright spots = likely foil interference
+            foil_score = min(100.0, (variance_ratio * 300 + brightness_ratio * 200))
+            
+            # Determine interference level
+            if foil_score > 60:
+                interference_level = 'high'
+            elif foil_score > 30:
+                interference_level = 'moderate'
+            else:
+                interference_level = 'low'
+            
+            logger.debug(f"      Foil analysis: variance_ratio={variance_ratio:.3f}, brightness_ratio={brightness_ratio:.3f}, foil_score={foil_score:.1f}")
+            
+            return {
+                'foil_interference_score': foil_score,
+                'interference_level': interference_level,
+                'has_reflective_areas': brightness_ratio > 0.1,
+                'has_texture_variation': variance_ratio > 0.2
+            }
+            
+        except Exception as e:
+            logger.warning(f"Foil interference assessment failed: {e}")
+            return {
+                'foil_interference_score': 0.0,
+                'interference_level': 'unknown',
+                'has_reflective_areas': False,
+                'has_texture_variation': False
+            }
+    
     def _calculate_composite_score(self, scores: Dict[str, float]) -> float:
         """Calculate weighted composite quality score."""
         weights = {
-            'blur': 0.4,           # Most important for OCR/AI
-            'resolution': 0.15,     # Less important - mobile photos are often smaller
-            'lighting': 0.25,       # Important for visibility
-            'card_detection': 0.2   # Important but can be compensated
+            'blur': 0.55,           # CRITICAL for text/number reading accuracy
+            'resolution': 0.1,      # Less important - mobile photos are often smaller
+            'lighting': 0.2,        # Important for visibility
+            'card_detection': 0.15  # Important but can be compensated
         }
         
         composite = sum(scores[key] * weights[key] for key in weights)
         return min(100.0, max(0.0, composite))
     
-    def _generate_feedback(self, scores: Dict[str, float]) -> Dict:
+    def _generate_feedback(self, scores: Dict[str, float], foil_assessment: Dict = None) -> Dict:
         """Generate actionable feedback based on quality scores."""
         feedback = {
             'overall': self._get_overall_rating(scores['composite']),
@@ -275,6 +331,25 @@ class QualityAssessment:
             feedback['issues'].append('Card not clearly visible')
             feedback['suggestions'].append('Center the card in frame and ensure clear edges')
         
+        # Foil-specific feedback
+        if foil_assessment:
+            interference_level = foil_assessment.get('interference_level')
+            foil_score = foil_assessment.get('foil_interference_score', 0)
+            
+            if interference_level == 'high' and foil_score > 60:
+                feedback['issues'].append('High foil/holographic interference detected')
+                feedback['suggestions'].extend([
+                    'Try photographing from a different angle to reduce reflections',
+                    'Use diffused lighting or avoid direct light sources',
+                    'Consider taking multiple photos from different angles'
+                ])
+            elif interference_level == 'moderate' and foil_score > 30:
+                feedback['issues'].append('Moderate foil interference may affect text readability')
+                feedback['suggestions'].append('Try adjusting the angle to minimize reflections')
+            
+            if foil_assessment.get('has_reflective_areas'):
+                feedback['suggestions'].append('Card has reflective areas - angle adjustment may improve readability')
+        
         # Positive feedback for good scores
         if scores['composite'] > 80:
             feedback['suggestions'].append('Excellent image quality - processing will be fast')
@@ -283,12 +358,12 @@ class QualityAssessment:
         
         return feedback
     
-    def assess_authenticity_indicators(self, gemini_analysis) -> Dict:
+    def assess_authenticity_indicators(self, gemini_analysis, quality_result=None) -> Dict:
         """
         Assess authenticity based on Gemini's analysis results.
         
         This provides a quality assessment perspective on card authenticity,
-        complementing Gemini's detailed authenticity analysis.
+        complementing Gemini's detailed authenticity analysis and applying foil interference penalties.
         """
         if not gemini_analysis or not gemini_analysis.authenticity_info:
             return {
@@ -299,6 +374,11 @@ class QualityAssessment:
         
         auth_info = gemini_analysis.authenticity_info
         auth_score = auth_info.authenticity_score or 50
+        
+        # Get foil assessment from quality result
+        foil_assessment = None
+        if quality_result and quality_result.get('details', {}).get('foil_assessment'):
+            foil_assessment = quality_result['details']['foil_assessment']
         
         # Quality assessment perspective on authenticity
         quality_concerns = []
@@ -311,18 +391,37 @@ class QualityAssessment:
         
         # No need to check individual indicators - just use the score
         
-        # Check readability score
-        if hasattr(auth_info, 'readability_score') and auth_info.readability_score is not None:
-            readability_score = auth_info.readability_score
+        # Check readability score and apply foil interference penalty
+        original_readability = getattr(auth_info, 'readability_score', None) if auth_info else None
+        readability_score = original_readability
+        
+        # Apply foil interference penalty to readability score
+        if foil_assessment and original_readability is not None:
+            foil_interference = foil_assessment['foil_interference_score']
+            interference_level = foil_assessment['interference_level']
+            
+            if interference_level == 'high' and original_readability > 70:
+                # High foil interference + high claimed readability = likely overconfident
+                penalty = min(40, foil_interference * 0.6)  # Up to 40 point penalty
+                readability_score = max(30, original_readability - penalty)
+                quality_concerns.append(f'High foil interference detected - adjusted readability from {original_readability} to {readability_score:.0f}')
+                logger.info(f"🚨 Foil penalty applied: readability {original_readability} → {readability_score:.0f} (foil score: {foil_interference:.1f})")
+            elif interference_level == 'moderate' and original_readability > 80:
+                # Moderate interference + very high claimed readability = somewhat suspicious  
+                penalty = min(25, foil_interference * 0.4)  # Up to 25 point penalty
+                readability_score = max(50, original_readability - penalty)
+                quality_concerns.append(f'Moderate foil interference may affect readability - adjusted from {original_readability} to {readability_score:.0f}')
+                logger.info(f"⚠️ Foil penalty applied: readability {original_readability} → {readability_score:.0f} (foil score: {foil_interference:.1f})")
+        
+        # Evaluate final readability score
+        if readability_score is not None:
             if readability_score < 30:
                 quality_concerns.append('Very low text readability detected')
             elif readability_score < 50:
                 quality_concerns.append('Text readability concerns identified')
         
-        # Determine overall authenticity quality rating (consider readability)
-        readability_score = getattr(auth_info, 'readability_score', None) if auth_info else None
-        
-        # Factor in readability score if available
+        # Determine overall authenticity quality rating (consider adjusted readability)
+        # Factor in adjusted readability score if available
         if readability_score is not None and readability_score < 30:
             rating = 'poor'  # Very low readability overrides other scores
         elif auth_score >= 80 and (readability_score is None or readability_score >= 60):
@@ -342,7 +441,9 @@ class QualityAssessment:
             'quality_concerns': quality_concerns,
             'quality_confidence': quality_confidence,
             'authenticity_score': auth_score,
-            'readability_score': readability_score
+            'readability_score': readability_score,
+            'original_readability_score': original_readability,
+            'foil_interference_detected': foil_assessment is not None and foil_assessment['interference_level'] in ['moderate', 'high']
         }
     
     def _get_overall_rating(self, score: float) -> str:

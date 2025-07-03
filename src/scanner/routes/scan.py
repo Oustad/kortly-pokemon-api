@@ -1548,6 +1548,55 @@ async def scan_pokemon_card(request: ScanRequest):
             },
         )
         
+        # Check for foil card certainty threshold filtering
+        quality_result = pipeline_result.get('quality_result')
+        if quality_result and authenticity_info:
+            # Check if foil interference affects card certainty
+            foil_assessment = quality_result.get('details', {}).get('foil_assessment')
+            if foil_assessment:
+                interference_level = foil_assessment.get('interference_level')
+                foil_score = foil_assessment.get('foil_interference_score', 0)
+                readability_score = authenticity_info.readability_score
+                
+                # If high foil interference + low readability, route to expected non-identification
+                if (interference_level == 'high' and 
+                    foil_score > 60 and 
+                    readability_score is not None and 
+                    readability_score < 50):
+                    
+                    logger.info(f"🚨 Foil interference threshold exceeded: foil_score={foil_score:.1f}, readability={readability_score}")
+                    logger.info("   → Routing to expected non-identification due to foil interference")
+                    
+                    # Override success to false to prevent wrong matches
+                    error_message = "Pokemon card identified but foil interference affects readability - skipping search to prevent wrong matches"
+                    
+                    # Prepare response with no TCG matches
+                    response = ScanResponse(
+                        success=False,
+                        card_identification=gemini_analysis,
+                        tcg_matches=None,
+                        all_tcg_matches=None,
+                        best_match=None,
+                        processing=processing_info,
+                        cost_info=None,
+                        processed_image_filename=Path(processed_path).name if processed_path else None,
+                        error=error_message,
+                    )
+                    
+                    # Return early - don't search TCG database
+                    total_time = (time.time() - start_time) * 1000
+                    logger.info(f"⚠️ Foil interference scan complete in {total_time:.0f}ms - no TCG search performed")
+                    
+                    # Return simplified response if requested (default)
+                    if request.options.response_format != "detailed":
+                        return create_simplified_response(
+                            best_match=None,
+                            processing_info=processing_info,
+                            gemini_analysis=gemini_analysis
+                        )
+                    
+                    return response
+        
         # Track Gemini cost
         gemini_cost = 0.0
         if request.options.include_cost_tracking:
