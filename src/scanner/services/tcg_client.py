@@ -605,22 +605,39 @@ class PokemonTcgClient:
     
     def _normalize_card_number(self, number: Optional[str]) -> Optional[str]:
         """
-        Normalize card numbers to handle common variations.
+        Normalize card numbers to handle common variations while preserving variant suffixes.
         
         Args:
-            number: Card number from Gemini output
+            number: Card number from Gemini output (e.g., "177a/168", "060b", "25")
             
         Returns:
-            Normalized number for better matching
+            Normalized number for better matching (e.g., "177a", "60b", "25")
         """
         if not number:
             return number
             
         original_number = number
         
-        # Remove leading zeros (e.g., "060" -> "60")
-        if number.isdigit():
+        # Handle card numbers with set totals (e.g., "177a/168" -> "177a")
+        if "/" in number:
+            # Take the first part before the slash
+            number = number.split("/")[0]
+        
+        # Extract base number and variant suffix using regex
+        match = re.match(r'^(\d+)([a-zA-Z]?)$', number.strip())
+        
+        if match:
+            base_number, variant_suffix = match.groups()
+            
+            # Remove leading zeros from base number but preserve variant suffix
+            normalized_base = str(int(base_number))
+            
+            # Reconstruct with variant suffix
+            number = normalized_base + variant_suffix
+        elif number.isdigit():
+            # Simple numeric case - remove leading zeros
             number = str(int(number))
+        # If it doesn't match our expected patterns, leave it as-is
         
         # Handle special cases where Gemini might miss prefixes
         # For Hidden Fates Shiny Vault, numbers should have "SV" prefix

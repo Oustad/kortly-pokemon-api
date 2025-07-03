@@ -1248,8 +1248,8 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             # Clean number
             if 'number' in search_params and search_params['number']:
                 number = str(search_params['number']).strip()
-                # Extract card number (preserve prefix letters like H in H11/H32)
-                number_match = re.search(r'([A-Za-z]*\d+)', number)
+                # Extract card number (preserve prefix letters like H in H11/H32 and suffix letters like a in 177a)
+                number_match = re.search(r'([A-Za-z]*\d+[A-Za-z]*)', number)
                 if number_match:
                     cleaned_params['number'] = number_match.group(1)
                 else:
