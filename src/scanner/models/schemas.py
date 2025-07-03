@@ -41,11 +41,9 @@ class LanguageInfo(BaseModel):
 
 
 class AuthenticityInfo(BaseModel):
-    """Authenticity assessment information."""
-    authenticity_score: Optional[int] = Field(None, description="Authenticity score (0-100)")
-    authenticity_confidence: Optional[str] = Field(None, description="Confidence level (high/medium/low)")
-    authenticity_indicators: Optional[List[str]] = Field(None, description="Specific authenticity findings")
-    authenticity_reasoning: Optional[str] = Field(None, description="Explanation of authenticity assessment")
+    """Authenticity and readability assessment information."""
+    authenticity_score: Optional[int] = Field(None, description="Authenticity score (0-100, 100=authentic)")
+    readability_score: Optional[int] = Field(None, description="Text readability score (0-100, 100=perfectly readable)")
 
 
 class GeminiAnalysis(BaseModel):

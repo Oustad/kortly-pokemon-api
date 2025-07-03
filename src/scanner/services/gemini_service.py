@@ -269,30 +269,41 @@ PRIME CARD DETECTION (HeartGold/SoulSilver era):
 
 IMPORTANT: Detect the card language and preserve original names.
 
-CARD NUMBER READING (CRITICAL):
-- Read card numbers very carefully, character by character
-- Common mistakes: H11 vs H1, 011 vs 01, 104 vs 10
-- Double-check each digit, especially with stylized fonts or holo patterns
+CARD NUMBER READING (CRITICAL - MOST IMPORTANT):
+- Card numbers are THE MOST CRITICAL field for accurate identification
+- Read numbers very carefully, character by character, looking in multiple locations
+- FOIL/HOLO INTERFERENCE: Shiny/holographic patterns can obscure numbers - look past reflections
+- Common locations: bottom right corner, bottom left, or center bottom of card
+- Common mistakes: H11 vs H1, 011 vs 01, 104 vs 10, SV16 vs other numbers
+- Modern formats: Look for prefixes like "SV" (Scarlet & Violet), "PAL" (Paldea), etc.
 - e-Card era: Numbers often start with H (e.g., H11/H32, H25/H32)
-- Modern cards: Usually simple numbers (e.g., 62/116, 025/198)
+- If numbers are unclear due to foil/damage, indicate uncertainty in your analysis
+- Double and triple-check the number - getting this wrong ruins the entire identification
 
 AUTHENTICITY ASSESSMENT:
-Evaluate if this appears to be an authentic Pokemon card by checking:
-- Print Quality: Text should be sharp, colors accurate, no obvious printing defects
-- Pokemon Logo: Official "Pokémon" logo with accent should be present and correctly formatted
-- Typography: Font consistency, proper spacing, no misspellings or odd phrasing
-- Card Stock: Should appear to have proper thickness and finish
-- Holographic Patterns: If present, should match authentic Pokemon foil patterns
-- Content: Check for parody names (e.g., "Thicc Charizard"), inappropriate text, or obvious jokes
-- Set Symbols: Symbols should match known authentic Pokemon set symbols
-- Card Layout: Should follow standard Pokemon card layout and design principles
+Rate the authenticity of this Pokemon card from 0-100, considering:
+- Print quality, typography, and card layout
+- Official Pokemon logos and set symbols
+- Content authenticity (check for parody names, jokes, or fake text)
+- 100 = authentic official Pokemon card, 0 = clearly fake/parody
+
+READABILITY ASSESSMENT:
+Rate the text readability of this Pokemon card from 0-100, with SPECIAL EMPHASIS on numbers:
+- Card number clarity (MOST IMPORTANT - if numbers are unclear, score should be low)
+- Pokemon name legibility
+- Set information visibility
+- Overall text sharpness, especially considering foil/holo interference
+- 100 = all text perfectly readable including numbers, 0 = critical text illegible
+- IMPORTANT: If card numbers are hard to read due to foil/shine, significantly lower the score
 
 UNCERTAINTY AND CONFIDENCE HANDLING:
 - If text is blurry or unclear, indicate uncertainty in your analysis
 - Use phrases like "appears to be", "likely", "unclear due to image quality" when uncertain
+- CRITICAL: If card numbers are unclear due to foil/holo interference, say so explicitly
 - If you cannot clearly read set symbols or text, say so explicitly
 - Provide multiple possibilities when identification is ambiguous
 - Lower your confidence level when visual features are unclear or contradictory
+- For shiny/foil cards: be extra cautious about number reading accuracy
 
 Required format:
 TCG_SEARCH_START
@@ -315,9 +326,7 @@ TCG_SEARCH_START
   "border_color": "yellow/silver/black/gold/other border color",
   "energy_symbol_style": "classic/modern/3D energy symbol style",
   "authenticity_score": 85,
-  "authenticity_confidence": "high/medium/low",
-  "authenticity_indicators": ["specific findings like 'Official Pokemon logo present', 'Sharp print quality', 'Parody name detected', etc."],
-  "authenticity_reasoning": "Brief explanation of authenticity assessment"
+  "readability_score": 75
 }
 TCG_SEARCH_END"""
 

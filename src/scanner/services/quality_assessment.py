@@ -299,7 +299,6 @@ class QualityAssessment:
         
         auth_info = gemini_analysis.authenticity_info
         auth_score = auth_info.authenticity_score or 50
-        auth_confidence = auth_info.authenticity_confidence or 'medium'
         
         # Quality assessment perspective on authenticity
         quality_concerns = []
@@ -310,35 +309,40 @@ class QualityAssessment:
         elif auth_score < 50:
             quality_concerns.append('Authenticity concerns identified')
         
-        # Check for specific fake indicators in the indicators list
-        if auth_info.authenticity_indicators:
-            fake_indicators = [
-                'parody', 'fake', 'custom', 'joke', 'inappropriate', 
-                'misspelling', 'poor print quality', 'incorrect logo'
-            ]
-            for indicator in auth_info.authenticity_indicators:
-                indicator_lower = indicator.lower()
-                if any(fake_word in indicator_lower for fake_word in fake_indicators):
-                    quality_concerns.append(f'Fake card indicator: {indicator}')
+        # No need to check individual indicators - just use the score
         
-        # Determine overall authenticity quality rating
-        if auth_score >= 80 and auth_confidence == 'high':
+        # Check readability score
+        if hasattr(auth_info, 'readability_score') and auth_info.readability_score is not None:
+            readability_score = auth_info.readability_score
+            if readability_score < 30:
+                quality_concerns.append('Very low text readability detected')
+            elif readability_score < 50:
+                quality_concerns.append('Text readability concerns identified')
+        
+        # Determine overall authenticity quality rating (consider readability)
+        readability_score = getattr(auth_info, 'readability_score', None) if auth_info else None
+        
+        # Factor in readability score if available
+        if readability_score is not None and readability_score < 30:
+            rating = 'poor'  # Very low readability overrides other scores
+        elif auth_score >= 80 and (readability_score is None or readability_score >= 60):
             rating = 'excellent'
-        elif auth_score >= 60 and auth_confidence in ['high', 'medium']:
+        elif auth_score >= 60 and (readability_score is None or readability_score >= 50):
             rating = 'good'
-        elif auth_score >= 40:
+        elif auth_score >= 40 and (readability_score is None or readability_score >= 30):
             rating = 'questionable'
         else:
             rating = 'poor'
         
-        # Map confidence level
-        quality_confidence = 'high' if auth_confidence == 'high' else 'medium'
+        # Set confidence based on scores
+        quality_confidence = 'high' if auth_score >= 70 else 'medium'
         
         return {
             'authenticity_quality_rating': rating,
             'quality_concerns': quality_concerns,
             'quality_confidence': quality_confidence,
-            'authenticity_score': auth_score
+            'authenticity_score': auth_score,
+            'readability_score': readability_score
         }
     
     def _get_overall_rating(self, score: float) -> str:

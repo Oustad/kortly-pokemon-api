@@ -1309,8 +1309,10 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
             if visual_features:
                 cleaned_params['visual_features'] = visual_features
             
-            # Extract authenticity information
+            # Extract authenticity and readability information
             authenticity_info = {}
+            
+            # Parse authenticity score
             if 'authenticity_score' in search_params and search_params['authenticity_score']:
                 try:
                     score = int(search_params['authenticity_score'])
@@ -1319,20 +1321,14 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid authenticity_score: {search_params['authenticity_score']}")
             
-            if 'authenticity_confidence' in search_params and search_params['authenticity_confidence']:
-                confidence = str(search_params['authenticity_confidence']).strip().lower()
-                if confidence in ['high', 'medium', 'low']:
-                    authenticity_info['authenticity_confidence'] = confidence
-            
-            if 'authenticity_indicators' in search_params and search_params['authenticity_indicators']:
-                indicators = search_params['authenticity_indicators']
-                if isinstance(indicators, list):
-                    authenticity_info['authenticity_indicators'] = [str(i).strip() for i in indicators if str(i).strip()]
-            
-            if 'authenticity_reasoning' in search_params and search_params['authenticity_reasoning']:
-                reasoning = str(search_params['authenticity_reasoning']).strip()
-                if reasoning:
-                    authenticity_info['authenticity_reasoning'] = reasoning
+            # Parse readability score
+            if 'readability_score' in search_params and search_params['readability_score']:
+                try:
+                    score = int(search_params['readability_score'])
+                    if 0 <= score <= 100:
+                        authenticity_info['readability_score'] = score
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid readability_score: {search_params['readability_score']}")
             
             if authenticity_info:
                 cleaned_params['authenticity_info'] = authenticity_info
