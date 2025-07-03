@@ -252,6 +252,13 @@ IMPORTANT for Set Name Extraction:
   * "XY Flashfire", "XY Furious Fists", "XY Phantom Forces", "XY Primal Clash", "XY Roaring Skies", "XY Ancient Origins"
 - Black & White era: "Plasma Freeze", "Plasma Storm", "Plasma Blast", "Emerging Powers", "Noble Victories"
 - BREAK evolution cards are specifically from BREAKpoint/BREAKthrough sets
+- HIDDEN FATES SHINY VAULT DETECTION (CRITICAL):
+  * Card numbers starting with "SV" (like SV1, SV8, SV22, etc.) are from "Hidden Fates Shiny Vault"
+  * These cards have distinctive rainbow/cosmos foil patterns covering the entire card
+  * Despite "SV" prefix, these are NOT "Scarlet & Violet" cards - they are "Hidden Fates Shiny Vault"
+  * Set name should be "Hidden Fates Shiny Vault" (NOT "Scarlet & Violet")
+  * SV numbers range from SV1 to SV94 in Hidden Fates Shiny Vault
+  * Visual cues: Shiny/rainbow foil + SV number = Hidden Fates Shiny Vault set
 - Note any promo markings or special set indicators
 
 BREAK CARD DETECTION (XY BREAKpoint/BREAKthrough era):
@@ -278,7 +285,8 @@ CARD NUMBER LOCATION AND FORMAT:
 - VINTAGE CARDS (Base, Jungle, Fossil): Simple numbers like "22", "16", "43" in bottom-right or bottom-center
 - MODERN CARDS: "X/Y" format like "50/189", "144/185" in bottom-right corner
 - e-Card era: Numbers often start with H (e.g., H11/H32, H25/H32)
-- Recent sets: Look for prefixes like "SV" (Scarlet & Violet), "PAL" (Paldea), etc.
+- Recent sets: Look for prefixes like "PAL" (Paldea), etc.
+- SHINY VAULT "SV" NUMBERS: "SV" prefix indicates Hidden Fates Shiny Vault (SV1, SV8, SV22, etc.) - NOT Scarlet & Violet
 
 WHAT TO IGNORE (DO NOT use as card numbers):
 - Attack damage numbers (usually larger, in attack text like "Thunder deals 30 damage")
@@ -299,6 +307,8 @@ VERIFICATION STEPS:
 - If you see multiple possible numbers, specify the EXACT LOCATION of each
 - Card numbers are standalone, not part of attack descriptions or flavor text
 - Common mistakes: H11 vs H1, 011 vs 01, 104 vs 10, SV16 vs other numbers
+- SHINY VAULT NUMBERS: Be extra careful with SV numbers - foil can make SV8 look like complex patterns
+- SV numbers should be simple: SV1, SV8, SV22, etc. (NOT SV3/SV94 or other complex formats)
 - If numbers are unclear due to foil/damage, indicate uncertainty in your analysis
 - Double and triple-check the number - getting this wrong ruins the entire identification
 
