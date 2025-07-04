@@ -19,7 +19,17 @@ This document outlines comprehensive cleanup opportunities to improve code quali
 - **`processed_images/`** (119MB)
   - Contains temporary processed images from testing
   - Safe to delete - regenerated automatically during scans
-  - **Action**: Clear entire directory or add to `.gitignore`
+  - **UPDATE**: Analysis confirms NO core functionality depends on processed images
+    - Only used by `simple_accuracy_tester.py` for HTML report visualization
+    - Not served by any API endpoints
+    - Web UI does not use the `processed_image_filename` field
+    - Pure debugging/development feature
+  - **Action**: Remove entire processed image storage system:
+    1. Delete `save_processed_image()` function from `scan.py`
+    2. Remove all calls to `save_processed_image()` 
+    3. Remove `processed_image_filename` from API schemas
+    4. Remove volume mounts from Docker/Kubernetes configs
+    5. Update `simple_accuracy_tester.py` to work without processed images
 
 - **`test_results/`** (19MB) 
   - Old accuracy test reports and sample images
@@ -210,6 +220,7 @@ tests/
 - **File complexity**: Reduce `scan.py` from 2,541 to <1,000 lines
 - **Logging volume**: Reduce by ~50% in production
 - **Module count**: Increase focused modules from 1 to 5+
+- **Performance**: Eliminate disk I/O overhead from processed image saves
 
 ### **Qualitative**  
 - **Maintainability**: Easier to locate and modify specific functionality
@@ -228,5 +239,6 @@ tests/
 
 ---
 
-*Last Updated: 2025-07-03*
+*Last Updated: 2025-07-04*
 *Status: Ready for implementation*
+*Recent Update: Added processed image storage removal details after codebase analysis*
