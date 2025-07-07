@@ -23,8 +23,8 @@ class Config:
         self.environment = os.getenv("ENVIRONMENT", "production")
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
         
-        # Gemini AI Configuration (Hardcoded defaults for stability)
-        self.gemini_model = "models/gemini-2.0-flash"  # Hardcoded for consistency
+        # Gemini AI Configuration (Model configurable, other settings hardcoded)
+        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")  # Configurable for model updates
         self.gemini_max_tokens = 2000  # Hardcoded - sufficient for card analysis
         self.gemini_temperature = 0.1  # Hardcoded - low temperature for consistent results
         self.gemini_max_retries = 3  # Hardcoded - reasonable retry count
