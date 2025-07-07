@@ -39,9 +39,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 # Add to requests but continue
                 self.requests[client_ip].append(current_time)
             else:
+                from ..services.error_handler import create_rate_limit_error, raise_pokemon_scanner_error
+                error_details = create_rate_limit_error(
+                    limit=config.rate_limit_per_minute,
+                    window="minute",
+                    retry_after=60
+                )
+                
+                # We still need to raise HTTPException here for middleware, but with structured detail
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Rate limit exceeded. Maximum {config.rate_limit_per_minute} requests per minute.",
+                    detail=error_details.to_dict(),
                     headers={
                         "Retry-After": "60",
                         "X-RateLimit-Limit": str(config.rate_limit_per_minute),

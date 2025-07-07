@@ -42,6 +42,17 @@ from ..services.response_parser import (
     create_simplified_response,
     parse_gemini_response,
 )
+from ..services.error_handler import (
+    ErrorType,
+    create_image_quality_error,
+    create_non_tcg_card_error,
+    create_card_back_error,
+    create_non_pokemon_card_error,
+    create_no_match_error,
+    create_service_error,
+    raise_pokemon_scanner_error,
+    handle_unexpected_error,
+)
 from ..services.gemini_service import GeminiService
 from ..services.image_processor import ImageProcessor
 from ..services.metrics_service import get_metrics_service, RequestMetrics
@@ -207,7 +218,13 @@ async def scan_pokemon_card(request: ScanRequest):
         try:
             image_data = base64.b64decode(request.image)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {str(e)}")
+            from ..services.error_handler import ErrorDetails, ErrorType
+            error_details = ErrorDetails(
+                error_type=ErrorType.INVALID_IMAGE,
+                message=f"Invalid base64 image data: {str(e)}",
+                suggestions=["Ensure the image is properly base64 encoded", "Check that the image data is not corrupted"]
+            )
+            raise_pokemon_scanner_error(error_details)
         
         logger.info(f"🔍 Starting intelligent card scan for {request.filename or 'uploaded image'}")
         
@@ -234,47 +251,52 @@ async def scan_pokemon_card(request: ScanRequest):
         )
         
         if not pipeline_result['success']:
-            # Extract quality feedback from pipeline error result
-            quality_feedback = None
-            if 'processing' in pipeline_result and 'quality_feedback' in pipeline_result['processing']:
-                quality_feedback = pipeline_result['processing']['quality_feedback']
+            # Extract quality score from pipeline if available
+            quality_score = None
+            if 'processing' in pipeline_result:
+                quality_score = float(pipeline_result['processing'].get('quality_score', 0))
             
-            # Return user-friendly error with quality feedback
             error_message = pipeline_result.get('error', 'Processing pipeline failed')
-            error_detail = {
-                "message": error_message,
-                "error_type": "image_quality" if "quality too low" in error_message.lower() else "processing_failed",
-            }
             
-            if quality_feedback:
-                error_detail["quality_feedback"] = quality_feedback
+            # Determine if this is a quality issue or processing failure
+            if "quality too low" in error_message.lower():
+                error_details = create_image_quality_error(quality_score=quality_score)
+            else:
+                error_details = create_service_error(
+                    service_name="processing_pipeline",
+                    original_error=error_message,
+                    is_temporary=True
+                )
             
-            raise HTTPException(
-                status_code=400 if "quality too low" in pipeline_result.get('error', '').lower() else 500,
-                detail=json.dumps(error_detail),
-            )
+            raise_pokemon_scanner_error(error_details)
         
         # Extract Gemini result and parse for TCG search
         gemini_data = pipeline_result.get('card_data')
         if not gemini_data:
-            raise HTTPException(
-                status_code=500,
-                detail="Processing pipeline did not return card data",
+            error_details = create_service_error(
+                service_name="processing_pipeline",
+                original_error="Pipeline did not return card data",
+                is_temporary=False
             )
+            raise_pokemon_scanner_error(error_details)
         
         # Check if Gemini processing was successful
         if not gemini_data.get('success', False):
-            raise HTTPException(
-                status_code=500,
-                detail=f"Gemini processing failed: {gemini_data.get('error', 'Unknown error')}",
+            error_details = create_service_error(
+                service_name="gemini",
+                original_error=gemini_data.get('error', 'Unknown error'),
+                is_temporary=True
             )
+            raise_pokemon_scanner_error(error_details)
         
         # Ensure response field exists before parsing
         if 'response' not in gemini_data:
-            raise HTTPException(
-                status_code=500,
-                detail="Gemini response missing required data",
+            error_details = create_service_error(
+                service_name="gemini",
+                original_error="Response missing required data",
+                is_temporary=False
             )
+            raise_pokemon_scanner_error(error_details)
         
         parsed_data = parse_gemini_response(gemini_data["response"])
         
@@ -294,72 +316,27 @@ async def scan_pokemon_card(request: ScanRequest):
             logger.warning(f"⚠️ Low authenticity score ({authenticity_score}) - likely non-TCG Pokemon card")
             
             # Get quality score from pipeline if available
-            quality_score = 0
+            quality_score = None
             if 'processing' in pipeline_result:
                 quality_score = float(pipeline_result['processing'].get('quality_score', 0))
             
-            # Create quality feedback for non-TCG cards
-            quality_feedback = QualityFeedback(
-                overall="poor",
-                issues=[
-                    "This appears to be a Pokemon card but not an official TCG card",
-                    "Possible sticker, collectible, or fan-made card detected"
-                ],
-                suggestions=[
-                    "Ensure you're scanning an official Pokemon Trading Card Game card",
-                    "Check for proper TCG formatting and official set symbols",
-                    "Avoid stickers, collectibles, or promotional items"
-                ]
+            error_details = create_non_tcg_card_error(
+                authenticity_score=authenticity_score,
+                quality_score=quality_score
             )
-            
-            error_detail = {
-                "message": "This appears to be a Pokemon-related item but not an official TCG card. Please scan an official Pokemon Trading Card Game card.",
-                "error_type": "non_tcg_card",
-                "quality_feedback": quality_feedback.dict(),
-                "quality_score": quality_score,
-                "authenticity_score": authenticity_score
-            }
-            
-            raise HTTPException(
-                status_code=400,
-                detail=json.dumps(error_detail)
-            )
+            raise_pokemon_scanner_error(error_details)
         
         # Check if Gemini response contains vague indicators suggesting poor image quality
         if contains_vague_indicators(parsed_data):
             logger.warning("⚠️ Gemini response contains vague indicators - image quality likely too low")
             
             # Get quality score from pipeline if available
-            quality_score = 0
+            quality_score = None
             if 'processing' in pipeline_result:
                 quality_score = float(pipeline_result['processing'].get('quality_score', 0))
             
-            # Create quality feedback
-            quality_feedback = QualityFeedback(
-                overall="poor",
-                issues=[
-                    "Image too blurry to read card details clearly",
-                    "Card text and numbers are not legible"
-                ],
-                suggestions=[
-                    "Ensure the card is well-lit with no shadows",
-                    "Hold the camera steady and wait for auto-focus",
-                    "Try taking the photo from directly above the card",
-                    "Clean the camera lens if needed"
-                ]
-            )
-            
-            error_detail = {
-                "message": "Image quality too low to identify card details. The card text and numbers are not clearly visible.",
-                "error_type": "image_quality",
-                "quality_feedback": quality_feedback.dict(),
-                "quality_score": quality_score
-            }
-            
-            raise HTTPException(
-                status_code=400,
-                detail=json.dumps(error_detail)
-            )
+            error_details = create_image_quality_error(quality_score=quality_score)
+            raise_pokemon_scanner_error(error_details)
         
         # Create card type info object
         card_type_info = None
@@ -815,26 +792,26 @@ async def scan_pokemon_card(request: ScanRequest):
                 if highest_card:
                     logger.info(f"   📊 Best candidate: {highest_card.get('card_name')} #{highest_card.get('card_number')} from {highest_card.get('set_name')}")
                 
-                error_detail = {
-                    "message": "Card not found: No matching Pokemon cards found in database",
-                    "error_type": "card_not_found",
-                    "details": {
-                        "highest_score": highest_score,
-                        "required_score": MINIMUM_SCORE_THRESHOLD,
-                        "score_gap": MINIMUM_SCORE_THRESHOLD - highest_score
-                    },
-                    "suggestions": [
-                        "Try a clearer image with better lighting",
-                        "Ensure the card is fully visible and centered",
-                        "Make sure the image is not blurry or distorted",
-                        "Check that it's a Pokemon trading card (not a different card game)"
-                    ]
+                # Create detailed error with search information
+                search_details = {
+                    "highest_score": highest_score,
+                    "required_score": MINIMUM_SCORE_THRESHOLD,
+                    "score_gap": MINIMUM_SCORE_THRESHOLD - highest_score
                 }
                 
-                raise HTTPException(
-                    status_code=404,
-                    detail=json.dumps(error_detail)
+                error_details = create_no_match_error(
+                    search_params=parsed_data,
+                    request_id=None
                 )
+                error_details.details.update(search_details)
+                error_details.suggestions = [
+                    "Try a clearer image with better lighting",
+                    "Ensure the card is fully visible and centered", 
+                    "Make sure the image is not blurry or distorted",
+                    "Check that it's a Pokemon trading card (not a different card game)"
+                ]
+                
+                raise_pokemon_scanner_error(error_details)
             
             best_match_card = None
             logger.info(f"📊 Processing {len(all_scored_matches)} scored matches for detailed response")
@@ -984,31 +961,15 @@ async def scan_pokemon_card(request: ScanRequest):
                     
             elif card_type == "pokemon_back":
                 # Card back detected - return user-friendly error
-                raise HTTPException(
-                    status_code=400,
-                    detail=json.dumps({
-                        "message": "Card back detected. Please photograph the front of the card.",
-                        "quality_feedback": {
-                            "overall": processing_info.quality_feedback.overall,
-                            "issues": ["Card back detected"],
-                            "suggestions": ["Please photograph the front of the card to identify it"]
-                        }
-                    })
-                )
+                quality_score = processing_info.quality_score if hasattr(processing_info, 'quality_score') else None
+                error_details = create_card_back_error(quality_score=quality_score)
+                raise_pokemon_scanner_error(error_details)
                 
             elif card_type == "non_pokemon":
                 # Non-Pokemon card detected - return user-friendly error
-                raise HTTPException(
-                    status_code=400,
-                    detail=json.dumps({
-                        "message": "Non-Pokemon card detected. This scanner only supports Pokemon TCG cards.",
-                        "quality_feedback": {
-                            "overall": processing_info.quality_feedback.overall,
-                            "issues": ["Non-Pokemon card detected"],
-                            "suggestions": ["Please scan a Pokemon TCG card"]
-                        }
-                    })
-                )
+                quality_score = processing_info.quality_score if hasattr(processing_info, 'quality_score') else None
+                error_details = create_non_pokemon_card_error(quality_score=quality_score)
+                raise_pokemon_scanner_error(error_details)
                 
             elif card_type == "unknown":
                 # Unknown cards - consider failed if no data extracted
@@ -1085,12 +1046,10 @@ async def scan_pokemon_card(request: ScanRequest):
         
         raise
     except Exception as e:
-        logger.error(f"❌ Card scan failed: {str(e)}")
-        
         # Calculate total time even on error
         total_time = (time.time() - start_time) * 1000
         
-        # Prepare error context
+        # Prepare error context for webhook
         error_context = {
             "filename": request.filename,
             "processing_time_ms": int(total_time),
@@ -1118,31 +1077,8 @@ async def scan_pokemon_card(request: ScanRequest):
             error_type=type(e).__name__,
         ))
         
-        # Create minimal processing info for error response
-        quality_feedback = QualityFeedback(
-            overall="unknown",
-            issues=["Processing failed"],
-            suggestions=["Try uploading a different image"]
-        )
-        
-        processing_info_obj = ProcessingInfo(
-            quality_score=0.0,
-            quality_feedback=quality_feedback,
-            processing_tier="failed",
-            target_time_ms=2000,
-            actual_time_ms=total_time,
-            model_used="none",
-            image_enhanced=False,
-            performance_rating="failed",
-            timing_breakdown={"error_ms": total_time},
-            processing_log=[f"Error: {str(e)}"]
-        )
-        
-        return ScanResponse(
-            success=False,
-            error=str(e),
-            processing=processing_info_obj,
-        )
+        # Handle unexpected error with proper error response
+        handle_unexpected_error(e, context="card_scan")
 
 
 @router.get("/processed-images/list")
@@ -1192,8 +1128,7 @@ async def list_processed_images():
         return {"images": images}
         
     except Exception as e:
-        logger.error(f"Error listing processed images: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_unexpected_error(e, context="listing_processed_images")
 
 
 @router.get("/processed-images/{filename}")
@@ -1212,11 +1147,21 @@ async def get_processed_image(filename: str):
         file_path = processed_dir / filename
         
         if not file_path.exists() or not file_path.is_file():
-            raise HTTPException(status_code=404, detail="Image not found")
+            from ..services.error_handler import ErrorDetails, ErrorType
+            error_details = ErrorDetails(
+                error_type=ErrorType.NO_CARD_FOUND,
+                message="Image not found"
+            )
+            raise_pokemon_scanner_error(error_details)
         
         # Verify it's actually an image file
         if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-            raise HTTPException(status_code=400, detail="Invalid image file type")
+            from ..services.error_handler import ErrorDetails, ErrorType
+            error_details = ErrorDetails(
+                error_type=ErrorType.UNSUPPORTED_FORMAT,
+                message="Invalid image file type"
+            )
+            raise_pokemon_scanner_error(error_details)
         
         return FileResponse(
             path=str(file_path),
@@ -1227,7 +1172,6 @@ async def get_processed_image(filename: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error serving image {filename}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_unexpected_error(e, context="serving_processed_image")
 
 
