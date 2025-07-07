@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from ..models.schemas import PokemonCard, ProcessingInfo, GeminiAnalysis, SimplifiedScanResponse
+from ..models.schemas import PokemonCard, ProcessingInfo, GeminiAnalysis, ScanResponse, AlternativeMatch, MatchScore
 
 logger = logging.getLogger(__name__)
 
@@ -70,62 +70,113 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
     return False
 
 
+def _extract_market_prices(card: PokemonCard) -> Optional[Dict[str, float]]:
+    """Extract and flatten market prices from a PokemonCard."""
+    if not card.market_prices:
+        return None
+    
+    market_prices = {}
+    if isinstance(card.market_prices, dict):
+        # Check for card type variants (normal, holofoil, reverseHolofoil, etc.)
+        price_data = None
+        
+        # Priority order for price variants
+        for variant in ['normal', 'holofoil', 'reverseHolofoil', '1stEditionNormal', '1stEditionHolofoil']:
+            if variant in card.market_prices:
+                price_data = card.market_prices[variant]
+                break
+        
+        # If no variant found, check for direct price structure
+        if not price_data and 'low' in card.market_prices:
+            price_data = card.market_prices
+        
+        # Extract prices from the data
+        if price_data and isinstance(price_data, dict):
+            market_prices['low'] = price_data.get('low', 0)
+            market_prices['mid'] = price_data.get('mid', 0)
+            market_prices['high'] = price_data.get('high', 0)
+            market_prices['market'] = price_data.get('market', price_data.get('mid', 0))
+            return market_prices
+    
+    return None
+
+
+def _get_image_url(card: PokemonCard) -> Optional[str]:
+    """Extract image URL from a PokemonCard."""
+    if card.images:
+        return card.images.get('large') or card.images.get('small')
+    return None
+
+
+def _create_alternative_match(match_score_item: Dict[str, Any]) -> AlternativeMatch:
+    """Create an AlternativeMatch from a MatchScore item."""
+    card = match_score_item.get('card')
+    score = match_score_item.get('score', 0)
+    
+    return AlternativeMatch(
+        name=card.get('name', 'Unknown'),
+        set_name=card.get('set', {}).get('name') if card.get('set') else None,
+        number=card.get('number'),
+        hp=card.get('hp'),
+        types=card.get('types'),
+        rarity=card.get('rarity'),
+        image=card.get('images', {}).get('large') or card.get('images', {}).get('small') if card.get('images') else None,
+        match_score=score,
+        market_prices=_extract_market_prices(PokemonCard(**card)) if card else None
+    )
+
+
 def create_simplified_response(
     best_match: Optional[PokemonCard],
     processing_info: ProcessingInfo,
-    gemini_analysis: Optional[GeminiAnalysis] = None
-) -> SimplifiedScanResponse:
-    """Create a simplified response from the scan results."""
+    gemini_analysis: Optional[GeminiAnalysis] = None,
+    all_match_scores: Optional[list] = None,
+    best_match_score: int = 0
+) -> ScanResponse:
+    """Create a unified response from the scan results."""
+    
+    # Extract detected language from Gemini analysis
+    detected_language = "en"  # Default
+    if gemini_analysis and gemini_analysis.language_info:
+        detected_language = gemini_analysis.language_info.detected_language
+    elif gemini_analysis and gemini_analysis.structured_data:
+        lang_info = gemini_analysis.structured_data.get('language_info', {})
+        detected_language = lang_info.get('detected_language', 'en')
+    
+    # Create other matches from all_match_scores (excluding best match, limit to 5, score >= 750)
+    other_matches = []
+    if all_match_scores:
+        MINIMUM_SCORE_THRESHOLD = 750
+        # Skip first match (best match) and filter by threshold
+        for match_item in all_match_scores[1:]:  # Skip index 0 (best match)
+            if match_item.get('score', 0) >= MINIMUM_SCORE_THRESHOLD and len(other_matches) < 5:
+                try:
+                    other_matches.append(_create_alternative_match(match_item))
+                except Exception as e:
+                    logger.warning(f"Failed to create alternative match: {e}")
+                    continue
     
     # If we have a best match from TCG, use that data
     if best_match:
-        # Extract market prices - flatten the structure
-        market_prices = None
-        if best_match.market_prices:
-            market_prices = {}
-            # Handle different price structures
-            if isinstance(best_match.market_prices, dict):
-                # Check for card type variants (normal, holofoil, reverseHolofoil, etc.)
-                price_data = None
-                
-                # Priority order for price variants
-                for variant in ['normal', 'holofoil', 'reverseHolofoil', '1stEditionNormal', '1stEditionHolofoil']:
-                    if variant in best_match.market_prices:
-                        price_data = best_match.market_prices[variant]
-                        break
-                
-                # If no variant found, check for direct price structure
-                if not price_data and 'low' in best_match.market_prices:
-                    price_data = best_match.market_prices
-                
-                # Extract prices from the data
-                if price_data and isinstance(price_data, dict):
-                    market_prices['low'] = price_data.get('low', 0)
-                    market_prices['mid'] = price_data.get('mid', 0)
-                    market_prices['high'] = price_data.get('high', 0)
-                    market_prices['market'] = price_data.get('market', price_data.get('mid', 0))
-        
-        # Get image URL
-        image_url = None
-        if best_match.images:
-            image_url = best_match.images.get('large') or best_match.images.get('small')
-        
-        return SimplifiedScanResponse(
+        return ScanResponse(
             name=best_match.name,
             set_name=best_match.set_name,
             number=best_match.number,
             hp=best_match.hp,
             types=best_match.types,
             rarity=best_match.rarity,
-            image=image_url,
-            market_prices=market_prices,
-            quality_score=processing_info.quality_score
+            image=_get_image_url(best_match),
+            detected_language=detected_language,
+            match_score=best_match_score,
+            market_prices=_extract_market_prices(best_match),
+            quality_score=processing_info.quality_score,
+            other_matches=other_matches
         )
     
     # Fallback to Gemini data if no TCG match
     elif gemini_analysis and gemini_analysis.structured_data:
         data = gemini_analysis.structured_data
-        return SimplifiedScanResponse(
+        return ScanResponse(
             name=data.get('name', 'Unknown'),
             set_name=data.get('set_name'),
             number=data.get('number'),
@@ -133,8 +184,11 @@ def create_simplified_response(
             types=data.get('types'),
             rarity=data.get('rarity'),
             image=None,  # No image from Gemini
+            detected_language=detected_language,
+            match_score=0,  # No TCG match
             market_prices=None,  # No prices without TCG match
-            quality_score=processing_info.quality_score
+            quality_score=processing_info.quality_score,
+            other_matches=[]  # No alternatives without TCG match
         )
     
     # Fallback response for cases where we have minimal data
@@ -147,7 +201,7 @@ def create_simplified_response(
             if name_match:
                 name = name_match.group(1)
         
-        return SimplifiedScanResponse(
+        return ScanResponse(
             name=name,
             set_name=None,
             number=None,
@@ -155,8 +209,11 @@ def create_simplified_response(
             types=None,
             rarity=None,
             image=None,
+            detected_language=detected_language,
+            match_score=0,
             market_prices=None,
-            quality_score=processing_info.quality_score
+            quality_score=processing_info.quality_score,
+            other_matches=[]
         )
 
 

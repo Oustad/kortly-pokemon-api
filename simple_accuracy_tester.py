@@ -42,7 +42,6 @@ async def scan_image(session: aiohttp.ClientSession, image_path: Path, api_url: 
             "image": image_base64,
             "filename": image_path.name,
             "options": {
-                "response_format": "detailed",  # Use advanced endpoint for full data
                 "optimize_for_speed": False,  # Use standard tier
                 "include_cost_tracking": False,
                 "retry_on_truncation": True
@@ -83,23 +82,41 @@ def categorize_result(result: Dict[str, Any]) -> str:
     # Check for expected non-identification cases
     error_msg = str(result.get("error", ""))
     
-    # Parse JSON error messages
+    # Parse structured error messages (new format)
+    error_code = None
+    message = ""
+    error_type = None
+    
     if error_msg.startswith("{"):
         try:
             import json
             error_obj = json.loads(error_msg)
             message = error_obj.get("message", "")
+            error_code = error_obj.get("error_code", "")
+            error_type = error_obj.get("error_type", "")
         except:
             message = error_msg
     else:
         message = error_msg
     
-    # Check for expected cases (case-insensitive and robust)
+    # Check for expected cases using error codes (preferred) or message content
     message_lower = message.lower()
     
+    # Check by error code first (more reliable)
+    if error_code:
+        if error_code in ["card_back_detected", "non_pokemon_card", "image_quality_too_low", "no_card_found"]:
+            return "expected_non_identification"
+        elif error_code in ["rate_limited", "timeout_error", "internal_error", "processing_failed"]:
+            return "failed"
+    
+    # Fallback to message content checking
     if "card back detected" in message_lower:
         return "expected_non_identification"
-    elif "quality too low" in message_lower:
+    elif "quality too low" in message_lower or "image quality" in message_lower:
+        return "expected_non_identification"
+    elif "foil interference" in message_lower:
+        return "expected_non_identification"
+    elif "heavily damaged" in message_lower or "scratched" in message_lower:
         return "expected_non_identification"
     elif "non-pokemon card detected" in message_lower:
         return "expected_non_identification"
@@ -117,15 +134,57 @@ def categorize_result(result: Dict[str, Any]) -> str:
         return "failed"
 
 def extract_top_matches(result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Extract top 3 matches from detailed response."""
+    """Extract top 3 matches from unified response format."""
     if not result["success"] or not result["response"]:
         return []
     
     response = result["response"]
+    matches = []
     
-    # Extract from all_tcg_matches (detailed response format)
-    if "all_tcg_matches" in response and response["all_tcg_matches"]:
-        matches = []
+    # Extract best match from top level (new unified format)
+    if "name" in response and "match_score" in response:
+        # Create best match entry
+        best_match = {
+            "name": response.get("name", "Unknown"),
+            "set_name": response.get("set_name", ""),
+            "number": response.get("number", ""),
+            "hp": response.get("hp", ""),
+            "types": response.get("types", []),
+            "rarity": response.get("rarity", ""),
+            "score": response.get("match_score", 0),
+            "confidence": "high",  # Best match gets high confidence
+            "reasoning": ["Best match from search results"],
+            "score_breakdown": {"best_match": response.get("match_score", 0)},
+            "image_small": response.get("image", ""),
+            "image_large": response.get("image", ""),
+            "tcg_player_url": f"https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q={response.get('name', '').replace(' ', '%20')}&view=grid"
+        }
+        matches.append(best_match)
+        
+        # Add other matches from other_matches array
+        other_matches = response.get("other_matches", [])
+        for alt_match in other_matches[:2]:  # Add up to 2 more (total 3)
+            match_entry = {
+                "name": alt_match.get("name", "Unknown"),
+                "set_name": alt_match.get("set_name", ""),
+                "number": alt_match.get("number", ""),
+                "hp": alt_match.get("hp", ""),
+                "types": alt_match.get("types", []),
+                "rarity": alt_match.get("rarity", ""),
+                "score": alt_match.get("match_score", 0),
+                "confidence": "medium" if alt_match.get("match_score", 0) >= 800 else "low",
+                "reasoning": ["Alternative match from search results"],
+                "score_breakdown": {"alternative_match": alt_match.get("match_score", 0)},
+                "image_small": alt_match.get("image", ""),
+                "image_large": alt_match.get("image", ""),
+                "tcg_player_url": f"https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q={alt_match.get('name', '').replace(' ', '%20')}&view=grid"
+            }
+            matches.append(match_entry)
+        
+        return matches
+    
+    # Fallback for old format (should not be needed with new unified format)
+    elif "all_tcg_matches" in response and response["all_tcg_matches"]:
         for match_score in response["all_tcg_matches"][:3]:  # Top 3
             if not match_score:  # Skip None entries
                 continue
@@ -150,28 +209,6 @@ def extract_top_matches(result: Dict[str, Any]) -> List[Dict[str, Any]]:
             })
         return matches
     
-    # Fallback: extract best match only
-    elif "best_match" in response and response["best_match"]:
-        card = response["best_match"]
-        if not card:  # Skip if card is None
-            return []
-        images = card.get("images", {}) if card else {}
-        return [{
-            "name": card.get("name", "Unknown"),
-            "set_name": card.get("set_name", ""),
-            "number": card.get("number", ""),
-            "hp": card.get("hp", ""),
-            "types": card.get("types", []),
-            "rarity": card.get("rarity", ""),
-            "score": 999999,  # Best match gets max score
-            "confidence": "high",
-            "reasoning": ["Best match from search results"],
-            "score_breakdown": {"best_match": 999999},
-            "image_small": images.get("small", ""),
-            "image_large": images.get("large", ""),
-            "tcg_player_url": f"https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q={card.get('name', '').replace(' ', '%20')}&view=grid"
-        }]
-    
     return []
 
 
@@ -193,16 +230,32 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                     "processed_image_filename": None
                 }
             
-            # Check if we have any TCG matches
-            all_tcg_matches = response.get("all_tcg_matches", [])
-            best_match = response.get("best_match")
+            # Check if we have any TCG matches in unified format
+            has_match = response.get("name") and response.get("match_score", 0) > 0
             
             # If success but no matches, recategorize as expected_non_identification
-            if (all_tcg_matches is None or len(all_tcg_matches) == 0) and best_match is None:
+            if not has_match:
                 category = "expected_non_identification"
             
-            # Handle detailed response format (new primary format)
-            if "card_identification" in response and "processing" in response:
+            # Handle unified response format (new primary format)
+            if "name" in response and "quality_score" in response:
+                # Set error message if no matches found
+                error_message = ""
+                if category == "expected_non_identification":
+                    error_message = "Pokemon card identified but no TCG database matches found"
+                
+                return {
+                    "category": category,
+                    "card_name": response.get("name", "Unknown"),
+                    "set_name": response.get("set_name", ""),
+                    "quality_score": response.get("quality_score", 0),
+                    "error_message": error_message,
+                    "top_matches": extract_top_matches(result),
+                    "processed_image_filename": None
+                }
+            
+            # Handle old detailed response format (fallback)
+            elif "card_identification" in response and "processing" in response:
                 card_id = response["card_identification"]
                 structured_data = card_id.get("structured_data", {}) if card_id else {}
                 processing = response.get("processing", {}) if response else {}
@@ -233,18 +286,6 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                     "processed_image_filename": None
                 }
             
-            # Handle simplified response format (fallback)
-            elif "name" in response and "quality_score" in response:
-                return {
-                    "category": category,
-                    "card_name": response.get("name", "Unknown"),
-                    "set_name": response.get("set_name", ""),
-                    "quality_score": response.get("quality_score", 0),
-                    "error_message": "",
-                    "top_matches": [],
-                    "processed_image_filename": None
-                }
-            
             else:
                 return {
                     "category": "failed",
@@ -257,35 +298,76 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                 }
         
         elif category == "expected_non_identification":
-            # Parse the error message for display
+            # Parse the structured error message for better display
             error_msg = str(result.get("error", ""))
+            display_message = error_msg
+            quality_score = 0
+            error_code = "unknown"
+            
             if error_msg.startswith("{"):
                 try:
                     import json
                     error_obj = json.loads(error_msg)
                     display_message = error_obj.get("message", error_msg)
+                    error_code = error_obj.get("error_code", "unknown")
+                    quality_score = error_obj.get("quality_score", 0)
+                    
+                    # Add additional context for specific error types
+                    if error_code == "image_quality_too_low":
+                        issues = error_obj.get("issues", [])
+                        if issues:
+                            display_message += f" ({', '.join(issues[:2])})"
+                    
                 except:
                     display_message = error_msg
-            else:
-                display_message = error_msg
+            
+            # Create descriptive card name based on error type
+            card_name = "N/A (Expected)"
+            if "foil interference" in display_message.lower():
+                card_name = "N/A (Foil Interference)"
+            elif "damaged" in display_message.lower() or "scratched" in display_message.lower():
+                card_name = "N/A (Card Damage)"
+            elif "card back" in display_message.lower():
+                card_name = "N/A (Card Back)"
+            elif "non-pokemon" in display_message.lower():
+                card_name = "N/A (Non-Pokemon)"
             
             return {
                 "category": category,
-                "card_name": "N/A (Expected)",
+                "card_name": card_name,
                 "set_name": "",
-                "quality_score": 0,  # We don't have quality score for these
+                "quality_score": quality_score,
                 "error_message": display_message,
                 "top_matches": [],
                 "processed_image_filename": None
             }
         
         else:  # failed
+            # Parse structured error for failed cases too
+            error_msg = str(result.get("error", "Unknown error"))
+            display_message = error_msg
+            status_code = result.get("status_code", 0)
+            
+            if error_msg.startswith("{"):
+                try:
+                    import json
+                    error_obj = json.loads(error_msg)
+                    display_message = error_obj.get("message", error_msg)
+                    error_code = error_obj.get("error_code", "")
+                    
+                    # Add status code context
+                    if status_code:
+                        display_message = f"[{status_code}] {display_message}"
+                        
+                except:
+                    display_message = error_msg
+            
             return {
                 "category": category,
                 "card_name": "ERROR",
                 "set_name": "",
                 "quality_score": 0,
-                "error_message": result.get("error", "Unknown error"),
+                "error_message": display_message,
                 "top_matches": [],
                 "processed_image_filename": None
             }
@@ -564,10 +646,40 @@ def generate_html_report(results: List[Dict[str, Any]], output_file: str, api_ur
                     </div>"""
         
         elif category == "expected_non_identification" or category == "failed":
+            # Determine icon and title based on error type
+            error_message = card_info.get('error_message', 'No additional details available.')
+            card_name = card_info.get('card_name', 'N/A')
+            
+            icon = "ℹ️"
+            title = "Details"
+            
+            if "Foil Interference" in card_name:
+                icon = "✨"
+                title = "Foil Interference Detected"
+            elif "Card Damage" in card_name:
+                icon = "🔧"
+                title = "Card Damage Detected"
+            elif "Card Back" in card_name:
+                icon = "🔄"
+                title = "Card Back Detected"
+            elif "Non-Pokemon" in card_name:
+                icon = "🚫"
+                title = "Non-Pokemon Card"
+            elif category == "failed":
+                icon = "❌"
+                title = "Processing Failed"
+            
+            # Show quality score if available
+            quality_info = ""
+            quality_score = card_info.get('quality_score', 0)
+            if quality_score > 0:
+                quality_info = f'<div style="margin-top: 10px; padding: 8px; background: #f3f4f6; border-radius: 4px;"><strong>Quality Score:</strong> {quality_score:.1f}/100</div>'
+            
             html_content += f"""
                     <div class="error-details">
-                        <h4>ℹ️ Details</h4>
-                        <p>{card_info.get('error_message', 'No additional details available.')}</p>
+                        <h4>{icon} {title}</h4>
+                        <p>{error_message}</p>
+                        {quality_info}
                     </div>"""
         
         html_content += """

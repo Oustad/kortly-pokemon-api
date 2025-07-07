@@ -14,7 +14,6 @@ class ScanOptions(BaseModel):
     max_processing_time: Optional[int] = Field(None, description="Maximum processing time in ms")
     prefer_speed: Optional[bool] = Field(None, description="Prefer speed over quality")
     prefer_quality: Optional[bool] = Field(None, description="Prefer quality over speed")
-    response_format: str = Field(default="simplified", description="Response format: 'simplified' (default) or 'detailed'")
 
 
 class ScanRequest(BaseModel):
@@ -98,8 +97,8 @@ class CostInfo(BaseModel):
     cost_breakdown: Dict[str, float] = Field(..., description="Detailed cost breakdown")
 
 
-class SimplifiedScanResponse(BaseModel):
-    """Simplified response model for card scanning."""
+class AlternativeMatch(BaseModel):
+    """Alternative match option for card scanning."""
     name: str = Field(..., description="Pokemon name")
     set_name: Optional[str] = Field(None, description="Set name")
     number: Optional[str] = Field(None, description="Card number")
@@ -107,8 +106,8 @@ class SimplifiedScanResponse(BaseModel):
     types: Optional[List[str]] = Field(None, description="Pokemon types")
     rarity: Optional[str] = Field(None, description="Card rarity")
     image: Optional[str] = Field(None, description="Card image URL")
+    match_score: int = Field(..., description="Match score for this alternative")
     market_prices: Optional[Dict[str, float]] = Field(None, description="Market price data")
-    quality_score: float = Field(..., description="Image quality score (0-100)")
 
 
 class MatchScore(BaseModel):
@@ -121,15 +120,22 @@ class MatchScore(BaseModel):
 
 
 class ScanResponse(BaseModel):
-    """Response model for card scanning."""
-    success: bool = Field(..., description="Whether scan was successful")
-    card_identification: Optional[GeminiAnalysis] = Field(None, description="Gemini's card analysis")
-    tcg_matches: Optional[List[PokemonCard]] = Field(None, description="Matching cards from TCG API")
-    all_tcg_matches: Optional[List[MatchScore]] = Field(None, description="All TCG matches with detailed scoring")
-    best_match: Optional[PokemonCard] = Field(None, description="Best matching card")
-    processing: ProcessingInfo = Field(..., description="Processing details and quality metrics")
-    cost_info: Optional[CostInfo] = Field(None, description="Cost tracking information")
-    error: Optional[str] = Field(None, description="Error message if scan failed")
+    """Unified response model for card scanning."""
+    # Top-level best match data
+    name: str = Field(..., description="Pokemon name")
+    set_name: Optional[str] = Field(None, description="Set name")
+    number: Optional[str] = Field(None, description="Card number")
+    hp: Optional[str] = Field(None, description="HP value")
+    types: Optional[List[str]] = Field(None, description="Pokemon types")
+    rarity: Optional[str] = Field(None, description="Card rarity")
+    image: Optional[str] = Field(None, description="Card image URL")
+    detected_language: str = Field(..., description="Detected language from card")
+    match_score: int = Field(..., description="Match score for the best match")
+    market_prices: Optional[Dict[str, float]] = Field(None, description="Market price data")
+    quality_score: float = Field(..., description="Image quality score (0-100)")
+    
+    # Additional matches above threshold
+    other_matches: List[AlternativeMatch] = Field(default_factory=list, description="Up to 5 other matches above threshold")
 
 
 class HealthResponse(BaseModel):

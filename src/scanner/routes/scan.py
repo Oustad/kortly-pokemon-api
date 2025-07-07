@@ -22,7 +22,6 @@ from ..models.schemas import (
     QualityFeedback,
     ScanRequest,
     ScanResponse,
-    SimplifiedScanResponse,
 )
 from ..services.card_matcher import (
     calculate_match_score_detailed,
@@ -164,6 +163,13 @@ async def scan_pokemon_card(request: ScanRequest):
     """
     start_time = time.time()
     cost_tracker = CostTracker()
+    
+    # Initialize variables to avoid UnboundLocalError
+    total_time = 0.0
+    best_match_score = 0
+    gemini_cost = 0.0
+    tcg_matches = []
+    processing_info = None
     
     try:
         # Decode base64 image
@@ -315,6 +321,10 @@ async def scan_pokemon_card(request: ScanRequest):
             },
         )
         
+        # Get quality score for error handling
+        processing_info_dict = pipeline_result.get('processing', {})
+        quality_score = processing_info_dict.get('quality_score', 100)
+        
         # Check for foil card certainty threshold filtering
         quality_result = pipeline_result.get('quality_result')
         if quality_result and authenticity_info:
@@ -332,42 +342,21 @@ async def scan_pokemon_card(request: ScanRequest):
                     readability_score < 50):
                     
                     logger.info(f"🚨 Foil interference threshold exceeded: foil_score={foil_score:.1f}, readability={readability_score}")
-                    logger.info("   → Routing to expected non-identification due to foil interference")
+                    logger.info("   → Raising image quality error due to foil interference")
                     
-                    # Override success to false to prevent wrong matches
-                    error_message = "Pokemon card identified but foil interference affects readability - skipping search to prevent wrong matches"
-                    
-                    # Prepare response with no TCG matches
-                    response = ScanResponse(
-                        success=False,
-                        card_identification=gemini_analysis,
-                        tcg_matches=None,
-                        all_tcg_matches=None,
-                        best_match=None,
-                        processing=processing_info,
-                        cost_info=None,
-                        processed_image_filename=None,
-                        error=error_message,
+                    # Create image quality error with foil-specific details
+                    error_details = create_image_quality_error(
+                        quality_score=quality_score,
+                        specific_issues=[
+                            "Foil interference affects card readability",
+                            "High foil reflection patterns detected",
+                            "Card text and numbers obscured by foil patterns"
+                        ]
                     )
-                    
-                    # Return early - don't search TCG database
-                    total_time = (time.time() - start_time) * 1000
-                    logger.info(f"⚠️ Foil interference scan complete in {total_time:.0f}ms - no TCG search performed")
-                    
-                    # Return simplified response if requested (default)
-                    if request.options.response_format != "detailed":
-                        return create_simplified_response(
-                            best_match=None,
-                            processing_info=processing_info,
-                            gemini_analysis=gemini_analysis
-                        )
-                    
-                    return response
+                    raise_pokemon_scanner_error(error_details)
         
         # Check for scratch/damage detection - after foil interference check
-        # Get quality score from processing info since quality_result is not in pipeline_result
-        processing_info_dict = pipeline_result.get('processing', {})
-        quality_score = processing_info_dict.get('quality_score', 100)
+        # quality_score already retrieved above from processing_info_dict
         
         if authenticity_info:
             readability_score = authenticity_info.readability_score
@@ -388,55 +377,25 @@ async def scan_pokemon_card(request: ScanRequest):
                 
                 if combined_confidence < 65 or (readability_score < 75 and has_incomplete_number):
                     logger.info(f"🚨 SCRATCH DETECTION TRIGGERED: combined_confidence={combined_confidence:.1f} < 65 OR (readability={readability_score} < 75 AND incomplete={has_incomplete_number})")
+                    logger.info("   → Raising image quality error due to card damage")
                     
-                    # Override success to false to prevent wrong matches
-                    error_message = "Pokemon card appears heavily damaged or scratched - skipping search to prevent incorrect identification"
-                    
-                    # Create processing info for early return
-                    quality_feedback = QualityFeedback(
-                        overall="poor",
-                        issues=["Card appears heavily damaged or scratched"],
-                        suggestions=["Use a card in better condition", "Ensure better lighting and focus"]
-                    )
-                    
-                    processing_info = ProcessingInfo(
+                    # Create image quality error with damage-specific details
+                    error_details = create_image_quality_error(
                         quality_score=quality_score,
-                        quality_feedback=quality_feedback,
-                        processing_tier=processing_info_dict.get('processing_tier', 'enhanced'),
-                        target_time_ms=processing_info_dict.get('target_time_ms', 0),
-                        actual_time_ms=int((time.time() - start_time) * 1000),
-                        model_used=processing_info_dict.get('model_used', 'gemini'),
-                        image_enhanced=processing_info_dict.get('image_enhanced', True),
-                        performance_rating=processing_info_dict.get('performance_rating', 'poor'),
-                        timing_breakdown=processing_info_dict.get('timing_breakdown', {})
+                        specific_issues=[
+                            "Card appears heavily damaged or scratched",
+                            "Text and numbers are not clearly readable",
+                            "Incomplete card number detected" if has_incomplete_number else "Low text readability score"
+                        ],
+                        request_id=None
                     )
-                    
-                    # Prepare response with no TCG matches
-                    response = ScanResponse(
-                        success=False,
-                        card_identification=gemini_analysis,
-                        tcg_matches=None,
-                        all_tcg_matches=None,
-                        best_match=None,
-                        processing=processing_info,
-                        cost_info=None,
-                        processed_image_filename=None,
-                        error=error_message,
-                    )
-                    
-                    # Return early - don't search TCG database
-                    total_time = (time.time() - start_time) * 1000
-                    logger.info(f"⚠️ Damage detection scan complete in {total_time:.0f}ms - no TCG search performed")
-                    
-                    # Return simplified response if requested (default)
-                    if request.options.response_format != "detailed":
-                        return create_simplified_response(
-                            best_match=None,
-                            processing_info=processing_info,
-                            gemini_analysis=gemini_analysis
-                        )
-                    
-                    return response
+                    error_details.suggestions = [
+                        "Use a card in better condition",
+                        "Ensure better lighting and focus",
+                        "Try cleaning the card surface gently",
+                        "Avoid cards with heavy wear or damage"
+                    ]
+                    raise_pokemon_scanner_error(error_details)
         
         # Track Gemini cost
         gemini_cost = 0.0
@@ -459,6 +418,7 @@ async def scan_pokemon_card(request: ScanRequest):
         search_attempts = []
         best_match_card = None
         all_match_scores = []  # Initialize here so it's always available
+        all_scored_matches = []  # Initialize here so it's always available
         
         if parsed_data.get("name"):
             all_search_results = []  # Collect results from all strategies
@@ -750,7 +710,7 @@ async def scan_pokemon_card(request: ScanRequest):
             # Process all scored matches
             for match_info in all_scored_matches:
                 # Create PokemonCard object for this match
-                card_data = match_info["card_data"]
+                card_data = match_info["card"]
                 pokemon_card = PokemonCard(
                     id=card_data["id"],
                     name=card_data["name"],
@@ -911,23 +871,16 @@ async def scan_pokemon_card(request: ScanRequest):
             # Fallback to original logic if no card type info  
             scan_success = True  # Default to success for now
 
-        # Prepare response
-        response = ScanResponse(
-            success=scan_success,
-            card_identification=gemini_analysis,
-            tcg_matches=tcg_matches if tcg_matches else None,
-            all_tcg_matches=all_match_scores if all_match_scores else None,
-            best_match=best_match_card,
-            processing=processing_info,
-            cost_info=cost_info,
-            processed_image_filename=Path(processed_path).name if processed_path else None,
-            error=error_message,
-        )
+        # Calculate total processing time
+        total_time = (time.time() - start_time) * 1000
         
+        # Get best match score from scored matches
+        if all_scored_matches:
+            best_match_score = all_scored_matches[0].get("score", 0)
+        
+        # Record metrics before returning
         logger.info(f"✅ Scan complete: {len(tcg_matches) if tcg_matches else 0} matches found in {total_time:.0f}ms")
         
-        
-        # Record metrics
         metrics_service = get_metrics_service()
         metrics_service.record_request(RequestMetrics(
             timestamp=datetime.now(),
@@ -940,16 +893,14 @@ async def scan_pokemon_card(request: ScanRequest):
             tcg_matches=len(tcg_matches) if tcg_matches else 0,
         ))
         
-        # Return simplified response if requested (default)
-        if request.options.response_format != "detailed":
-            return create_simplified_response(
-                best_match=best_match_card,
-                processing_info=processing_info,
-                gemini_analysis=gemini_analysis
-            )
-        
-        # Return detailed response if explicitly requested
-        return response
+        # Return unified response format
+        return create_simplified_response(
+            best_match=best_match_card,
+            processing_info=processing_info,
+            gemini_analysis=gemini_analysis,
+            all_match_scores=all_scored_matches,
+            best_match_score=best_match_score
+        )
         
     except HTTPException as e:
         # Log and send webhook for HTTP errors
