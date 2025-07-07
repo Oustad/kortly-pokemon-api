@@ -126,12 +126,14 @@ class CostTracker:
                 service_costs[service]["operations"][op] = 0
             service_costs[service]["operations"][op] += 1
         
+        session_duration_minutes = max((datetime.now() - self.session_start).total_seconds() / 60, 0.01)  # Minimum 0.01 minutes
+        
         return {
             "session_start": self.session_start.isoformat(),
-            "session_duration_minutes": (datetime.now() - self.session_start).seconds / 60,
+            "session_duration_minutes": session_duration_minutes,
             "total_requests": len(self.session_costs),
             "total_cost_usd": round(total_cost, 6),
-            "estimated_monthly_cost": round(total_cost * 30 * 24 * 60 / ((datetime.now() - self.session_start).seconds / 60) if self.session_costs else 0, 2),
+            "estimated_monthly_cost": round(total_cost * 30 * 24 * 60 / session_duration_minutes if self.session_costs else 0, 2),
             "services": service_costs,
             "average_cost_per_request": round(total_cost / len(self.session_costs), 6) if self.session_costs else 0,
         }

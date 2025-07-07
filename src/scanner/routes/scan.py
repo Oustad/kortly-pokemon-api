@@ -1,9 +1,7 @@
 """Main card scanning endpoint for Pokemon card scanner."""
 
 import base64
-import json
 import logging
-import os
 import re
 import time
 from datetime import datetime
@@ -12,7 +10,6 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from ..config import get_config
 from ..models.schemas import (
@@ -68,24 +65,6 @@ router = APIRouter(prefix="/api/v1", tags=["scanner"])
 
 # Constants
 MINIMUM_SCORE_THRESHOLD = 750  # Cards below this score are likely wrong matches
-
-
-# _get_set_family function moved to card_matcher service
-
-
-# _is_xy_family_match function moved to card_matcher service
-
-
-# _get_set_from_total_count function moved to card_matcher service
-
-
-# _correct_set_based_on_number_pattern function moved to card_matcher service
-
-
-# _correct_xy_set_based_on_number function moved to card_matcher service
-
-
-# _extract_set_name_from_symbol function moved to card_matcher service
 
 
 def is_valid_set_name(set_name: Optional[str]) -> bool:
@@ -167,33 +146,6 @@ def is_valid_card_number(number: Optional[str]) -> bool:
         return False
     
     return True
-
-
-# _is_pokemon_variant_match function moved to card_matcher service
-
-
-# contains_vague_indicators function moved to response_parser service
-
-
-
-
-# calculate_match_score function moved to card_matcher service
-
-# calculate_match_score function moved to card_matcher service
-
-
-# calculate_match_score_detailed function moved to card_matcher service
-
-# calculate_match_score_detailed function moved to card_matcher service
-
-
-# select_best_match function moved to card_matcher service
-
-
-# create_simplified_response function moved to response_parser service
-
-
-# parse_gemini_response function moved to response_parser service
 
 
 @router.post("/scan", responses={500: {"model": ErrorResponse}})
@@ -300,15 +252,8 @@ async def scan_pokemon_card(request: ScanRequest):
         
         parsed_data = parse_gemini_response(gemini_data["response"])
         
-        # Log the extracted parameters for debugging
-        logger.info(f"🎯 Extracted TCG search parameters from Gemini:")
-        logger.info(f"   📛 Name: '{parsed_data.get('name')}'")
-        logger.info(f"   🏷️ Set: '{parsed_data.get('set_name')}'")
-        logger.info(f"   🔢 Number: '{parsed_data.get('number')}'")
-        if parsed_data.get('set_size'):
-            logger.info(f"   📊 Set Size: {parsed_data.get('set_size')} cards")
-        logger.info(f"   ❤️ HP: '{parsed_data.get('hp')}'")
-        logger.info(f"   🎨 Types: {parsed_data.get('types')}")
+        # Log key extracted parameters
+        logger.info(f"🎯 Extracted TCG search parameters: name='{parsed_data.get('name')}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}'")
         
         # Check authenticity score to filter out non-TCG Pokemon cards (prioritize over vague indicators)
         authenticity_score = parsed_data.get('authenticity_info', {}).get('authenticity_score', 100)
@@ -424,20 +369,15 @@ async def scan_pokemon_card(request: ScanRequest):
         processing_info_dict = pipeline_result.get('processing', {})
         quality_score = processing_info_dict.get('quality_score', 100)
         
-        logger.debug(f"🔍 Scratch detection entry: quality_score={quality_score}, authenticity_info={authenticity_info is not None}")
         if authenticity_info:
             readability_score = authenticity_info.readability_score
             # quality_score already retrieved above from processing_info_dict
-            
-            logger.debug(f"🔍 Scratch detection check: readability={readability_score}, quality={quality_score}")
             
             # Check if card is too damaged to identify accurately
             if (readability_score is not None and 
                 quality_score is not None and 
                 readability_score < 75 and 
                 quality_score < 60):
-                
-                logger.debug(f"✅ Initial scratch conditions met: readability {readability_score} < 75, quality {quality_score} < 60")
                 
                 # Additional check: if card number is incomplete (ends with "/"), it's likely damaged
                 card_number = parsed_data.get('number', '')
@@ -446,11 +386,8 @@ async def scan_pokemon_card(request: ScanRequest):
                 # Combined confidence score
                 combined_confidence = (readability_score + quality_score) / 2
                 
-                logger.debug(f"🔍 Scratch detection details: card_number='{card_number}', incomplete={has_incomplete_number}, combined_confidence={combined_confidence:.1f}")
-                
                 if combined_confidence < 65 or (readability_score < 75 and has_incomplete_number):
                     logger.info(f"🚨 SCRATCH DETECTION TRIGGERED: combined_confidence={combined_confidence:.1f} < 65 OR (readability={readability_score} < 75 AND incomplete={has_incomplete_number})")
-                    
                     
                     # Override success to false to prevent wrong matches
                     error_message = "Pokemon card appears heavily damaged or scratched - skipping search to prevent incorrect identification"
@@ -533,7 +470,7 @@ async def scan_pokemon_card(request: ScanRequest):
                 number_valid = is_valid_card_number(parsed_data.get("number"))
                 
                 if set_valid and number_valid:
-                    logger.info("🎯 Strategy 1: Set + Number + Name (PRIORITY)")
+                    logger.debug("🎯 Strategy 1: Set + Number + Name (PRIORITY)")
                     logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}'")
                     strategy1_results = await tcg_client.search_cards(
                         name=parsed_data["name"],
@@ -544,13 +481,12 @@ async def scan_pokemon_card(request: ScanRequest):
                     )
                     if strategy1_results.get("data"):
                         all_search_results.extend(strategy1_results["data"])
-                        logger.info(f"✅ Strategy 1 found {len(strategy1_results['data'])} exact matches")
-                        for result in strategy1_results["data"][:3]:  # Log first 3 matches
-                            logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
+                        logger.debug(f"✅ Strategy 1 found {len(strategy1_results['data'])} exact matches")
+                        logger.debug(f"   📄 First match: {strategy1_results['data'][0].get('name')} #{strategy1_results['data'][0].get('number')} from {strategy1_results['data'][0].get('set', {}).get('name')}")
                     else:
-                        logger.info("   ❌ Strategy 1: No exact matches found")
+                        logger.debug("   ❌ Strategy 1: No exact matches found")
                 else:
-                    logger.info(f"   ⚠️ Strategy 1 skipped: Invalid parameters - Set valid: {set_valid}, Number valid: {number_valid}")
+                    logger.debug(f"   ⚠️ Strategy 1 skipped: Invalid parameters - Set valid: {set_valid}, Number valid: {number_valid}")
                     if not set_valid:
                         logger.info(f"      Invalid set: '{parsed_data.get('set_name')}'")
                     if not number_valid:
@@ -571,7 +507,7 @@ async def scan_pokemon_card(request: ScanRequest):
                 if len(all_search_results) == 0 and parsed_data.get("number") and parsed_data.get("name"):
                     # Only run if number is valid
                     if is_valid_card_number(parsed_data.get("number")):
-                        logger.info("🔄 Strategy 1.25: Cross-set Number + Name (ignore potentially wrong set)")
+                        logger.debug("🔄 Strategy 1.25: Cross-set Number + Name (ignore potentially wrong set)")
                         logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', number='{parsed_data.get('number')}'")
                         strategy1_25_results = await tcg_client.search_cards(
                             name=parsed_data["name"],
@@ -583,7 +519,7 @@ async def scan_pokemon_card(request: ScanRequest):
                             new_results = [card for card in strategy1_25_results["data"] 
                                          if not any(existing["id"] == card["id"] for existing in all_search_results)]
                             all_search_results.extend(new_results)
-                            logger.info(f"✅ Strategy 1.25 found {len(new_results)} cross-set matches")
+                            logger.debug(f"✅ Strategy 1.25 found {len(new_results)} cross-set matches")
                             
                             # Log which set we actually found the card in
                             if new_results:
@@ -592,7 +528,7 @@ async def scan_pokemon_card(request: ScanRequest):
                                 if found_set != original_set:
                                     logger.info(f"   🎯 Set correction: '{original_set}' → '{found_set}'")
                         else:
-                            logger.info("   ❌ Strategy 1.25: No cross-set matches found")
+                            logger.debug("   ❌ Strategy 1.25: No cross-set matches found")
                         
                         search_attempts.append({
                             "strategy": "cross_set_number_name",
@@ -603,7 +539,7 @@ async def scan_pokemon_card(request: ScanRequest):
                             "results": len(strategy1_25_results.get("data", [])),
                         })
                     else:
-                        logger.info(f"   ⚠️ Strategy 1.25 skipped: Invalid number '{parsed_data.get('number')}'")
+                        logger.debug(f"   ⚠️ Strategy 1.25 skipped: Invalid number '{parsed_data.get('number')}'")
                 
                 # Strategy 1.5: Set Family + Number + Name (for cases like "XY" -> "XY BREAKpoint")
                 if len(all_search_results) == 0 and parsed_data.get("set_name") and parsed_data.get("number"):
@@ -611,7 +547,7 @@ async def scan_pokemon_card(request: ScanRequest):
                     if is_valid_card_number(parsed_data.get("number")):
                         set_family = get_set_family(parsed_data.get("set_name"))
                         if set_family:
-                            logger.info(f"🔄 Strategy 1.5: Set Family expansion for '{parsed_data.get('set_name')}'")
+                            logger.debug(f"🔄 Strategy 1.5: Set Family expansion for '{parsed_data.get('set_name')}'")
                             logger.info(f"   📚 Set family contains: {set_family}")
                             for family_set in set_family:
                                 logger.info(f"   🔍 Searching in family set: '{family_set}'")
@@ -626,7 +562,7 @@ async def scan_pokemon_card(request: ScanRequest):
                                     new_results = [card for card in strategy1_5_results["data"] 
                                                  if not any(existing["id"] == card["id"] for existing in all_search_results)]
                                     all_search_results.extend(new_results)
-                                    logger.info(f"✅ Strategy 1.5 found {len(new_results)} matches in {family_set}")
+                                    logger.debug(f"✅ Strategy 1.5 found {len(new_results)} matches in {family_set}")
                                     for result in new_results[:2]:  # Log first 2 matches
                                         logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
                                 else:
@@ -642,13 +578,13 @@ async def scan_pokemon_card(request: ScanRequest):
                                 "results": len([r for r in all_search_results if "strategy1_5" in str(r)]),
                             })
                     else:
-                        logger.info(f"   ⚠️ Strategy 1.5 skipped: Invalid number '{parsed_data.get('number')}'")
+                        logger.debug(f"   ⚠️ Strategy 1.5 skipped: Invalid number '{parsed_data.get('number')}'")
             
             # Strategy 2: Set + Name (without number constraint)
             if parsed_data.get("set_name"):
                 # Only run if set name is valid
                 if is_valid_set_name(parsed_data.get("set_name")):
-                    logger.info("🔄 Strategy 2: Set + Name (no number)")
+                    logger.debug("🔄 Strategy 2: Set + Name (no number)")
                     logger.info(f"   🔍 Searching for: name='{parsed_data['name']}', set='{parsed_data.get('set_name')}'")
                     strategy2_results = await tcg_client.search_cards(
                         name=parsed_data["name"],
@@ -661,11 +597,11 @@ async def scan_pokemon_card(request: ScanRequest):
                         new_results = [card for card in strategy2_results["data"] 
                                      if not any(existing["id"] == card["id"] for existing in all_search_results)]
                         all_search_results.extend(new_results)
-                        logger.info(f"✅ Strategy 2 found {len(new_results)} additional matches")
+                        logger.debug(f"✅ Strategy 2 found {len(new_results)} additional matches")
                         for result in new_results[:3]:  # Log first 3 new matches
                             logger.info(f"   📄 Found: {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
                     else:
-                        logger.info("   ❌ Strategy 2: No set+name matches found")
+                        logger.debug("   ❌ Strategy 2: No set+name matches found")
                     
                     search_attempts.append({
                         "strategy": "set_name_only",
@@ -676,11 +612,11 @@ async def scan_pokemon_card(request: ScanRequest):
                         "results": len(strategy2_results.get("data", [])),
                     })
                 else:
-                    logger.info(f"   ⚠️ Strategy 2 skipped: Invalid set name '{parsed_data.get('set_name')}'")
+                    logger.debug(f"   ⚠️ Strategy 2 skipped: Invalid set name '{parsed_data.get('set_name')}'")
             
             # Strategy 3: Name + HP (cross-set search with HP validation)
             if parsed_data.get("hp") and len(all_search_results) < 5:
-                logger.info("🔄 Strategy 3: Name + HP (cross-set)")
+                logger.debug("🔄 Strategy 3: Name + HP (cross-set)")
                 strategy3_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
                     hp=parsed_data.get("hp"),
@@ -691,7 +627,7 @@ async def scan_pokemon_card(request: ScanRequest):
                     new_results = [card for card in strategy3_results["data"] 
                                  if not any(existing["id"] == card["id"] for existing in all_search_results)]
                     all_search_results.extend(new_results)
-                    logger.info(f"✅ Strategy 3 found {len(new_results)} HP-matching cards")
+                    logger.debug(f"✅ Strategy 3 found {len(new_results)} HP-matching cards")
                 
                 search_attempts.append({
                     "strategy": "name_hp_cross_set",
@@ -704,7 +640,7 @@ async def scan_pokemon_card(request: ScanRequest):
             
             # Strategy 4: Special case for Hidden Fates Shiny Vault numbers
             if parsed_data.get("set_name") == "Hidden Fates" and parsed_data.get("number") and len(all_search_results) < 3:
-                logger.info("🔄 Strategy 4: Hidden Fates with SV prefix")
+                logger.debug("🔄 Strategy 4: Hidden Fates with SV prefix")
                 sv_number = f"SV{parsed_data['number']}"
                 strategy4_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
@@ -717,7 +653,7 @@ async def scan_pokemon_card(request: ScanRequest):
                     new_results = [card for card in strategy4_results["data"] 
                                  if not any(existing["id"] == card["id"] for existing in all_search_results)]
                     all_search_results.extend(new_results)
-                    logger.info(f"✅ Strategy 4 found {len(new_results)} SV-prefixed cards")
+                    logger.debug(f"✅ Strategy 4 found {len(new_results)} SV-prefixed cards")
                 
                 search_attempts.append({
                     "strategy": "hidden_fates_sv_prefix",
@@ -731,7 +667,7 @@ async def scan_pokemon_card(request: ScanRequest):
             
             # Strategy 5: Fallback - Name only (fuzzy search)
             if len(all_search_results) < 5:
-                logger.info("🔄 Strategy 5: Fallback name-only (fuzzy)")
+                logger.debug("🔄 Strategy 5: Fallback name-only (fuzzy)")
                 strategy5_results = await tcg_client.search_cards(
                     name=parsed_data["name"],
                     page_size=15,
@@ -741,7 +677,7 @@ async def scan_pokemon_card(request: ScanRequest):
                     new_results = [card for card in strategy5_results["data"] 
                                  if not any(existing["id"] == card["id"] for existing in all_search_results)]
                     all_search_results.extend(new_results[:10])  # Limit fallback results
-                    logger.info(f"✅ Strategy 5 found {len(new_results[:10])} fallback matches")
+                    logger.debug(f"✅ Strategy 5 found {len(new_results[:10])} fallback matches")
                 
                 search_attempts.append({
                     "strategy": "fuzzy_name_only_fallback",
@@ -755,15 +691,10 @@ async def scan_pokemon_card(request: ScanRequest):
             tcg_results = {"data": all_search_results}
             
             # Log search strategy results
-            logger.info(f"📊 Search Strategy Summary:")
-            for attempt in search_attempts:
-                logger.info(f"   📊 {attempt['strategy']}: {attempt['results']} results")
+            strategy_summary = ', '.join([f"{attempt['strategy']}: {attempt['results']}" for attempt in search_attempts])
+            logger.debug(f"📊 Search Strategy Summary: {strategy_summary}")
             
             logger.info(f"🎯 Total combined search results: {len(all_search_results)} cards found")
-            if all_search_results:
-                logger.info(f"📋 Sample results:")
-                for i, result in enumerate(all_search_results[:5]):  # Show first 5
-                    logger.info(f"   {i+1}. {result.get('name')} #{result.get('number')} from {result.get('set', {}).get('name')}")
             
             # Convert to PokemonCard objects and find best match
             tcg_card_data = tcg_results.get("data", [])
@@ -993,15 +924,8 @@ async def scan_pokemon_card(request: ScanRequest):
             error=error_message,
         )
         
-        logger.info(f"🔍 Response prepared: tcg_matches={len(tcg_matches) if tcg_matches else 0}, all_tcg_matches={len(all_match_scores) if all_match_scores else 0}")
+        logger.info(f"✅ Scan complete: {len(tcg_matches) if tcg_matches else 0} matches found in {total_time:.0f}ms")
         
-        total_time = processing_info.actual_time_ms
-        logger.info(
-            f"✅ Intelligent scan complete in {total_time:.0f}ms "
-            f"(tier: {processing_info.processing_tier}, "
-            f"quality: {processing_info.quality_score:.1f})"
-            f"{f', cost: ${gemini_cost:.6f}' if cost_info else ''}"
-        )
         
         # Record metrics
         metrics_service = get_metrics_service()
