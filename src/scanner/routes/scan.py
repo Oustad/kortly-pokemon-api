@@ -672,44 +672,6 @@ def contains_vague_indicators(parsed_data: Dict[str, Any]) -> bool:
     return False
 
 
-def save_processed_image(image_data: bytes, original_filename: str, stage: str = "processed") -> Optional[str]:
-    """
-    Save processed image to disk for testing and debugging purposes.
-    
-    Args:
-        image_data: The image data as bytes
-        original_filename: Original filename for reference
-        stage: Stage of processing ("original" or "processed")
-        
-    Returns:
-        Relative path to saved image or None if failed
-    """
-    try:
-        # Create processed_images directory if it doesn't exist
-        processed_dir = Path("processed_images")
-        processed_dir.mkdir(exist_ok=True)
-        
-        # Generate timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Remove last 3 microsecond digits
-        
-        # Create filename
-        name_without_ext = Path(original_filename).stem if original_filename else "image"
-        extension = ".jpg"  # Always save as JPEG since we process to JPEG
-        filename = f"{name_without_ext}_{stage}_{timestamp}{extension}"
-        
-        # Full path
-        file_path = processed_dir / filename
-        
-        # Save the image
-        with open(file_path, "wb") as f:
-            f.write(image_data)
-        
-        logger.info(f"💾 Saved {stage} image: {file_path}")
-        return str(file_path)
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to save {stage} image: {str(e)}")
-        return None
 
 
 def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, Any]) -> int:
@@ -1407,7 +1369,7 @@ def parse_gemini_response(gemini_response: str) -> Dict[str, Any]:
                     parts = number.split('/')
                     if len(parts) == 2 and parts[1].strip().isdigit():
                         set_size = int(parts[1].strip())
-                        logger.info(f"🔢 Extracted set size: {set_size} from number '{number}'")
+                        logger.debug(f"🔢 Extracted set size: {set_size} from number '{number}'")
                 
                 # Extract card number (preserve prefix letters like H in H11/H32 and suffix letters like a in 177a)
                 number_match = re.search(r'([A-Za-z]*\d+[A-Za-z]*)', number)
@@ -1570,7 +1532,6 @@ async def scan_pokemon_card(request: ScanRequest):
         logger.info(f"🔍 Starting intelligent card scan for {request.filename or 'uploaded image'}")
         
         # Save original image for testing
-        original_path = save_processed_image(image_data, request.filename or "image", "original")
         
         # Initialize processing pipeline
         gemini_service = GeminiService(api_key=config.google_api_key)
@@ -1783,7 +1744,7 @@ async def scan_pokemon_card(request: ScanRequest):
                         best_match=None,
                         processing=processing_info,
                         cost_info=None,
-                        processed_image_filename=Path(processed_path).name if processed_path else None,
+                        processed_image_filename=None,
                         error=error_message,
                     )
                     
@@ -1806,12 +1767,12 @@ async def scan_pokemon_card(request: ScanRequest):
         processing_info_dict = pipeline_result.get('processing', {})
         quality_score = processing_info_dict.get('quality_score', 100)
         
-        logger.info(f"🔍 Scratch detection entry: quality_score={quality_score}, authenticity_info={authenticity_info is not None}")
+        logger.debug(f"🔍 Scratch detection entry: quality_score={quality_score}, authenticity_info={authenticity_info is not None}")
         if authenticity_info:
             readability_score = authenticity_info.readability_score
             # quality_score already retrieved above from processing_info_dict
             
-            logger.info(f"🔍 Scratch detection check: readability={readability_score}, quality={quality_score}")
+            logger.debug(f"🔍 Scratch detection check: readability={readability_score}, quality={quality_score}")
             
             # Check if card is too damaged to identify accurately
             if (readability_score is not None and 
@@ -1819,7 +1780,7 @@ async def scan_pokemon_card(request: ScanRequest):
                 readability_score < 75 and 
                 quality_score < 60):
                 
-                logger.info(f"✅ Initial scratch conditions met: readability {readability_score} < 75, quality {quality_score} < 60")
+                logger.debug(f"✅ Initial scratch conditions met: readability {readability_score} < 75, quality {quality_score} < 60")
                 
                 # Additional check: if card number is incomplete (ends with "/"), it's likely damaged
                 card_number = parsed_data.get('number', '')
@@ -1828,19 +1789,11 @@ async def scan_pokemon_card(request: ScanRequest):
                 # Combined confidence score
                 combined_confidence = (readability_score + quality_score) / 2
                 
-                logger.info(f"🔍 Scratch detection details: card_number='{card_number}', incomplete={has_incomplete_number}, combined_confidence={combined_confidence:.1f}")
+                logger.debug(f"🔍 Scratch detection details: card_number='{card_number}', incomplete={has_incomplete_number}, combined_confidence={combined_confidence:.1f}")
                 
                 if combined_confidence < 65 or (readability_score < 75 and has_incomplete_number):
                     logger.info(f"🚨 SCRATCH DETECTION TRIGGERED: combined_confidence={combined_confidence:.1f} < 65 OR (readability={readability_score} < 75 AND incomplete={has_incomplete_number})")
                     
-                    # Save processed image for early return if available
-                    processed_path = None
-                    if pipeline_result.get('processed_image_data'):
-                        processed_path = save_processed_image(
-                            pipeline_result['processed_image_data'], 
-                            request.filename or "image", 
-                            "processed"
-                        )
                     
                     # Override success to false to prevent wrong matches
                     error_message = "Pokemon card appears heavily damaged or scratched - skipping search to prevent incorrect identification"
@@ -1873,7 +1826,7 @@ async def scan_pokemon_card(request: ScanRequest):
                         best_match=None,
                         processing=processing_info,
                         cost_info=None,
-                        processed_image_filename=Path(processed_path).name if processed_path else None,
+                        processed_image_filename=None,
                         error=error_message,
                     )
                     
@@ -2294,14 +2247,6 @@ async def scan_pokemon_card(request: ScanRequest):
         
         tcg_time = (time.time() - tcg_start) * 1000
         
-        # Save processed image for testing
-        processed_path = None
-        if pipeline_result.get('processed_image_data'):
-            processed_path = save_processed_image(
-                pipeline_result['processed_image_data'], 
-                request.filename or "image", 
-                "processed"
-            )
         
         # Build comprehensive processing info
         processing_metadata = pipeline_result['processing']

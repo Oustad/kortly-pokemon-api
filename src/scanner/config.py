@@ -71,9 +71,6 @@ class Config:
         self.error_webhook_rate_limit = int(os.getenv("ERROR_WEBHOOK_RATE_LIMIT", "5"))
         self.error_webhook_environment_tag = os.getenv("ERROR_WEBHOOK_ENVIRONMENT_TAG", "production")
         
-        # Static Files
-        self.serve_static_files = os.getenv("SERVE_STATIC_FILES", "true").lower() == "true"
-        self.static_file_cache_age = int(os.getenv("STATIC_FILE_CACHE_AGE", "86400"))
         
         # Health Checks
         self.health_check_interval = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))

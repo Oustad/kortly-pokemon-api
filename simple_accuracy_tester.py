@@ -230,7 +230,7 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                     "quality_score": processing.get("quality_score", 0),
                     "error_message": error_message,
                     "top_matches": extract_top_matches(result),
-                    "processed_image_filename": response.get("processed_image_filename")
+                    "processed_image_filename": None
                 }
             
             # Handle simplified response format (fallback)
@@ -242,7 +242,7 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                     "quality_score": response.get("quality_score", 0),
                     "error_message": "",
                     "top_matches": [],
-                    "processed_image_filename": response.get("processed_image_filename")
+                    "processed_image_filename": None
                 }
             
             else:
@@ -276,7 +276,7 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                 "quality_score": 0,  # We don't have quality score for these
                 "error_message": display_message,
                 "top_matches": [],
-                "processed_image_filename": response.get("processed_image_filename")
+                "processed_image_filename": None
             }
         
         else:  # failed
@@ -287,7 +287,7 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
                 "quality_score": 0,
                 "error_message": result.get("error", "Unknown error"),
                 "top_matches": [],
-                "processed_image_filename": response.get("processed_image_filename")
+                "processed_image_filename": None
             }
     
     except Exception as e:
@@ -306,15 +306,6 @@ def extract_card_info(result: Dict[str, Any]) -> Dict[str, Any]:
 def generate_html_report(results: List[Dict[str, Any]], output_file: str, api_url: str = "http://localhost:8000"):
     """Generate an enhanced HTML report with top 3 matches and images."""
     
-    # Detect processed images directory
-    processed_images_dir = Path("processed_images")
-    if not processed_images_dir.exists():
-        # Try relative to script location
-        script_dir = Path(__file__).parent
-        processed_images_dir = script_dir / "processed_images"
-    
-    # Get absolute path for file:// URLs
-    processed_images_abs_path = processed_images_dir.resolve()
     
     # Calculate stats by category (with safety checks)
     total_images = len(results)
@@ -506,24 +497,6 @@ def generate_html_report(results: List[Dict[str, Any]], output_file: str, api_ur
                         </div>
                     </div>"""
         
-        # Add processed image if available
-        processed_filename = card_info.get("processed_image_filename")
-        if processed_filename:
-            html_content += f"""
-                    <div class="uploaded-image" style="margin-top: 20px;">
-                        <h4>🔧 Processed Image</h4>
-                        <div style="color: #6b7280; font-size: 0.9rem; margin-bottom: 10px;">
-                            Enhanced for AI analysis
-                        </div>
-                        <img src="file://{processed_images_abs_path}/{processed_filename}" 
-                             alt="Processed {result.get('filename', 'unknown')}" 
-                             style="max-width: 300px; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.15);"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                        <div style="background: #fee2e2; padding: 40px 20px; border: 2px dashed #fca5a5; border-radius: 8px; color: #991b1b; display: none;">
-                            ❌ Processed image not found<br/>
-                            <small>File: {processed_images_abs_path}/{processed_filename}</small>
-                        </div>
-                    </div>"""
         
         html_content += """
                 </div>
