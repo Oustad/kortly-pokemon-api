@@ -133,6 +133,12 @@ class PokemonTcgClient:
         self.rate_limit = rate_limit
         self.cache_ttl = cache_ttl
         
+        # Log API key usage
+        if self.api_key:
+            logger.info("🔑 Pokemon TCG API client initialized with API key - 20,000 requests/day capacity")
+        else:
+            logger.warning("⚠️ Pokemon TCG API client initialized without API key - limited to 1,000 requests/day")
+        
         # Simple in-memory cache
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.request_timestamps: List[float] = []

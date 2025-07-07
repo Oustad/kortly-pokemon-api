@@ -15,7 +15,7 @@ class Config:
         # Core API Configuration
         # Clean API keys to remove any whitespace or hidden characters that might cause issues
         self.google_api_key = os.getenv("GOOGLE_API_KEY", "").strip()
-        self.pokemon_tcg_api_key = os.getenv("POKEMON_TCG_API_KEY", "").strip()
+        self.pokemon_tcg_api_key = os.getenv("POKEMON_TCG_API_KEY", "").strip()  # Now required for production capacity
         
         # Server Configuration
         self.host = os.getenv("HOST", "0.0.0.0")
@@ -23,44 +23,39 @@ class Config:
         self.environment = os.getenv("ENVIRONMENT", "production")
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
         
-        # Gemini AI Configuration
-        self.gemini_model = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
-        self.gemini_max_tokens = int(os.getenv("GEMINI_MAX_TOKENS", "2000"))
-        self.gemini_temperature = float(os.getenv("GEMINI_TEMPERATURE", "0.1"))
-        self.gemini_max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
-        self.gemini_timeout_seconds = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "60"))
+        # Gemini AI Configuration (Hardcoded defaults for stability)
+        self.gemini_model = "models/gemini-2.0-flash"  # Hardcoded for consistency
+        self.gemini_max_tokens = 2000  # Hardcoded - sufficient for card analysis
+        self.gemini_temperature = 0.1  # Hardcoded - low temperature for consistent results
+        self.gemini_max_retries = 3  # Hardcoded - reasonable retry count
+        self.gemini_timeout_seconds = 60  # Hardcoded - 1 minute timeout
         
-        # Gemini Rate Limiting (requests per minute)
-        self.gemini_rate_limit_rpm = int(os.getenv("GEMINI_RATE_LIMIT_RPM", "8"))
-        self.gemini_rate_limit_enabled = os.getenv("GEMINI_RATE_LIMIT_ENABLED", "true").lower() == "true"
+        # Gemini Rate Limiting (Hardcoded for stability)
+        self.gemini_rate_limit_rpm = 8  # Hardcoded - conservative rate limit
+        self.gemini_rate_limit_enabled = True  # Hardcoded - always enabled for safety
         
-        # Image Processing Configuration
-        self.image_max_dimension = int(os.getenv("IMAGE_MAX_DIMENSION", "1024"))
-        self.image_jpeg_quality = int(os.getenv("IMAGE_JPEG_QUALITY", "85"))
-        self.image_max_file_size_mb = int(os.getenv("IMAGE_MAX_FILE_SIZE_MB", "10"))
-        self.image_min_dimension = int(os.getenv("IMAGE_MIN_DIMENSION", "400"))
+        # Image Processing Configuration (Hardcoded optimal values)
+        self.image_max_dimension = 1024  # Hardcoded - optimal for Gemini
+        self.image_jpeg_quality = 85  # Hardcoded - good quality/size balance
+        self.image_max_file_size_mb = 10  # Hardcoded - reasonable limit
+        self.image_min_dimension = 400  # Hardcoded - minimum for readability
         
-        # Caching Configuration
-        self.cache_enabled = os.getenv("CACHE_ENABLED", "true").lower() == "true"
-        self.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
-        self.cache_max_entries = int(os.getenv("CACHE_MAX_ENTRIES", "1000"))
+        # Caching Configuration (Removed - not implemented)
+        # Caching functionality not currently implemented
         
-        # Rate Limiting
-        self.rate_limit_per_minute = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
-        self.rate_limit_burst = int(os.getenv("RATE_LIMIT_BURST", "20"))
-        self.rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+        # Rate Limiting (Hardcoded defaults)
+        self.rate_limit_per_minute = 60  # Hardcoded - reasonable default
+        self.rate_limit_burst = 20  # Hardcoded - allows burst traffic
+        self.rate_limit_enabled = True  # Hardcoded - always enabled for protection
         
         # Security Configuration
         self.cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
-        self.allowed_hosts = os.getenv("ALLOWED_HOSTS", "*").split(",")
         self.enable_api_docs = os.getenv("ENABLE_API_DOCS", "true").lower() == "true"
-        self.api_key_header = os.getenv("API_KEY_HEADER", "X-API-Key")
         
         # Monitoring and Logging
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.enable_metrics = os.getenv("ENABLE_METRICS", "true").lower() == "true"
-        self.metrics_port = int(os.getenv("METRICS_PORT", "9090"))
-        self.enable_cost_tracking = os.getenv("ENABLE_COST_TRACKING", "true").lower() == "true"
+        self.enable_metrics = True  # Hardcoded - always enabled
+        self.enable_cost_tracking = True  # Hardcoded - always track costs
         
         # Error Notification Hooks
         self.error_webhook_url = os.getenv("ERROR_WEBHOOK_URL", "")
@@ -72,10 +67,8 @@ class Config:
         self.error_webhook_environment_tag = os.getenv("ERROR_WEBHOOK_ENVIRONMENT_TAG", "production")
         
         
-        # Health Checks
-        self.health_check_interval = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
-        self.startup_timeout = int(os.getenv("STARTUP_TIMEOUT", "60"))
-        self.shutdown_timeout = int(os.getenv("SHUTDOWN_TIMEOUT", "30"))
+        # Health Checks (Removed - not used)
+        # Health check intervals not currently implemented
     
     def validate(self, require_api_key: bool = True):
         """Validate required configuration values."""
@@ -84,14 +77,11 @@ class Config:
         if require_api_key and not self.google_api_key:
             errors.append("GOOGLE_API_KEY is required")
             
-        if self.image_max_dimension < self.image_min_dimension:
-            errors.append("IMAGE_MAX_DIMENSION must be greater than IMAGE_MIN_DIMENSION")
+        # Pokemon TCG API key is required for production capacity
+        if self.environment == "production" and not self.pokemon_tcg_api_key:
+            errors.append("POKEMON_TCG_API_KEY is required in production for full API capacity (20,000 requests/day vs 1,000)")
             
-        if self.image_jpeg_quality < 1 or self.image_jpeg_quality > 100:
-            errors.append("IMAGE_JPEG_QUALITY must be between 1 and 100")
-            
-        if self.rate_limit_burst > self.rate_limit_per_minute:
-            errors.append("RATE_LIMIT_BURST cannot exceed RATE_LIMIT_PER_MINUTE")
+        # Validation for hardcoded values removed - they're always valid now
             
         if errors:
             raise ValueError(f"Configuration errors: {'; '.join(errors)}")

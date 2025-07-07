@@ -38,7 +38,7 @@ async def health_check():
     
     # Check TCG client
     try:
-        tcg_client = PokemonTcgClient()
+        tcg_client = PokemonTcgClient(api_key=config.pokemon_tcg_api_key)
         stats = tcg_client.get_rate_limit_stats()
         tcg_available = stats["remaining_requests"] > 0
         services_status["tcg_api"] = tcg_available

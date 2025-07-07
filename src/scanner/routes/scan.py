@@ -1859,7 +1859,8 @@ async def scan_pokemon_card(request: ScanRequest):
         logger.info(f"🔍 Search parameters: name='{parsed_data.get('name')}', set='{parsed_data.get('set_name')}', number='{parsed_data.get('number')}', hp='{parsed_data.get('hp')}'")
         tcg_start = time.time()
         
-        tcg_client = PokemonTcgClient()
+        # Use API key for production capacity (20,000 requests/day vs 1,000)
+        tcg_client = PokemonTcgClient(api_key=config.pokemon_tcg_api_key)
         tcg_matches = []
         search_attempts = []
         best_match_card = None
