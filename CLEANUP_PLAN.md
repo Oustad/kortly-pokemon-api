@@ -51,6 +51,22 @@ This document outlines comprehensive cleanup opportunities to improve code quali
 - Keep only essential test images in `retest-images/` (already clean)
 - **Action**: Selective cleanup of outdated test data
 
+#### Remove Web UI Components
+- **`/web/` directory** (6 files)
+  - `index.html` and `index_simple.html` - Web interfaces
+  - `script.js` and `script_simple.js` - JavaScript files
+  - `style.css` and `style_simple.css` - CSS files
+  - **Action**: Delete entire `/web/` directory
+- **Static File Serving Infrastructure**
+  - Remove static file mounting from `main.py` (lines 114-123)
+  - Remove `serve_static_files` and `static_file_cache_age` from `config.py`
+  - Remove `SERVE_STATIC_FILES` environment variable and references
+- **Docker/Nginx Configuration**
+  - Remove `COPY web/ ./web/` from Dockerfiles
+  - Remove static asset handling from `nginx.cloudrun.conf`
+  - Remove `401.html` authentication error page
+- **Keep**: HTML report generation in `simple_accuracy_tester.py` (testing tool)
+
 ---
 
 ## 🏗️ Code Structure Improvements
@@ -174,6 +190,7 @@ tests/
 ### **Medium Priority**
 
 #### Configuration Cleanup
+- **Environment Variables Simplification** (see detailed analysis below)
 - Review environment variables (remove unused)
 - Consolidate similar configuration options
 - Document all configuration requirements
@@ -192,8 +209,9 @@ tests/
 2. **Remove debug scripts** (4 files)
 3. **Clean up excessive debug logging**
 4. **Remove commented code**
+5. **Remove web UI components** (`/web/` directory and static file serving)
 
-**Expected Savings**: ~140MB disk space, cleaner logs
+**Expected Savings**: ~140MB disk space, cleaner logs, simplified architecture
 
 ### **Phase 2: Structural Improvements** (4-6 hours)
 1. **Extract card matching logic** to separate service
@@ -239,6 +257,77 @@ tests/
 
 ---
 
+## 🔧 Environment Configuration Cleanup
+
+### **Current State**: 33 environment variables in .env file
+
+Based on comprehensive codebase analysis, many environment variables are unused or could be hardcoded for better maintainability.
+
+### **Phase 1: Remove Unused Variables** (12 variables)
+
+#### Variables to Remove Entirely
+- **`POKEMON_TCG_API_KEY`** - Loaded in config.py but never used in TCG client instantiation
+- **`ALLOWED_HOSTS`** - Loaded but never referenced beyond config.py
+- **`API_KEY_HEADER`** - Loaded but never used beyond config.py
+- **Caching Config** - `CACHE_ENABLED/CACHE_TTL_SECONDS/CACHE_MAX_ENTRIES` (caching not implemented)
+- **`METRICS_PORT`** - Loaded but never used
+- **`STATIC_FILE_CACHE_AGE`** - Not used in actual static file serving
+- **Health Check Config** - `HEALTH_CHECK_INTERVAL/STARTUP_TIMEOUT/SHUTDOWN_TIMEOUT` (not used)
+
+### **Phase 2: Hardcode Development Conveniences** (15 variables)
+
+#### Move to config.py with Sensible Defaults
+- **Gemini AI Config**: `GEMINI_MODEL/MAX_TOKENS/TEMPERATURE/MAX_RETRIES/TIMEOUT_SECONDS`
+- **Image Processing**: `IMAGE_MAX_DIMENSION/JPEG_QUALITY/MAX_FILE_SIZE_MB/MIN_DIMENSION`
+- **Rate Limiting**: `RATE_LIMIT_PER_MINUTE/BURST/ENABLED`
+- **Feature Flags**: `ENABLE_METRICS/ENABLE_COST_TRACKING/SERVE_STATIC_FILES`
+
+### **Phase 3: Keep Essential Environment Variables** (8 variables)
+
+#### Truly Environment-Specific
+- **`GOOGLE_API_KEY`** - Critical for Gemini API calls
+- **Server Config**: `HOST/PORT/ENVIRONMENT/DEBUG`
+- **Security**: `CORS_ORIGINS` (though may not be needed without web UI)
+- **Logging**: `LOG_LEVEL/ENABLE_API_DOCS`
+- **Monitoring**: All `ERROR_WEBHOOK_*` variables (7 variables)
+
+### **Phase 4: Fix Pokemon TCG API Key Implementation**
+
+#### Current Issue
+- **`POKEMON_TCG_API_KEY`** is defined but completely unused
+- `PokemonTcgClient()` instantiated without API key parameter
+- Missing production API capacity (limited to 1,000 requests/day instead of 20,000)
+
+#### Implementation Plan
+1. **Update TCG Client Instantiations**:
+   - `scan.py` line 1909: `tcg_client = PokemonTcgClient(config.pokemon_tcg_api_key)`
+   - `health.py` line 41: `tcg_client = PokemonTcgClient(config.pokemon_tcg_api_key)`
+   - Update debug scripts to use API key
+2. **Make API Key Required**: Add validation for production environments
+3. **Add Logging**: Show when API key is being used vs anonymous access
+
+### **Phase 5: Add Missing Variables**
+
+#### Variables Referenced in Code but Missing from .env
+- **`GEMINI_RATE_LIMIT_RPM`** - Used in config.py (default: 8)
+- **`GEMINI_RATE_LIMIT_ENABLED`** - Used in config.py (default: true)
+
+### **Expected Results**
+
+#### Before: 33 environment variables
+#### After: 9 environment variables
+- **Essential**: `GOOGLE_API_KEY`, `POKEMON_TCG_API_KEY`, `HOST`, `PORT`, `ENVIRONMENT`, `DEBUG`, `CORS_ORIGINS`, `LOG_LEVEL`, `ENABLE_API_DOCS`
+- **Removed**: 12 unused variables
+- **Hardcoded**: 15 variables with sensible defaults in config.py
+
+#### Benefits
+- **Simpler Deployment**: Fewer variables to configure
+- **Better Defaults**: Sensible hardcoded values for development conveniences
+- **Production Capacity**: Unlock full Pokemon TCG API limits (20,000 requests/day)
+- **Cleaner Configuration**: Only truly environment-specific variables remain
+
+---
+
 *Last Updated: 2025-07-04*
 *Status: Ready for implementation*
-*Recent Update: Added processed image storage removal details after codebase analysis*
+*Recent Updates: Added processed image storage removal, environment configuration cleanup, and web UI removal plan*
