@@ -47,7 +47,12 @@ processed_images/
 # MyPy
 .mypy_cache/
 .dmypy.json
-dmypy.json# Test results and reports
+dmypy.json
+
+# Rope refactoring tool
+.ropeproject/
+
+# Test results and reports
 simple_report_*.html
 test_results/*.html
 test_results/test_state.json

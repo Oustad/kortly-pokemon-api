@@ -77,19 +77,6 @@ The Pokemon Card Scanner is a production-ready **internal microservice** that us
 
 ## 📡 API Documentation
 
-### 🔐 Authentication
-
-The service requires **Google Cloud identity tokens** for authentication when deployed internally:
-
-```bash
-# Get identity token (from another Cloud service)
-TOKEN=$(gcloud auth print-identity-token --audiences="https://your-service-url")
-
-# Use in requests
-curl -H "Authorization: Bearer $TOKEN" \
-  https://your-service-url/api/v1/health
-```
-
 ### 🛠️ Core Endpoints
 
 #### POST `/api/v1/scan` - Scan Pokemon Card
@@ -98,12 +85,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```json
 {
   "image": "base64_encoded_image_data",
-  "filename": "card.jpg",
-  "options": {
-    "optimize_for_speed": true,
-    "include_cost_tracking": true,
-    "quality_threshold": 30
-  }
+  "filename": "card.jpg"
 }
 ```
 
@@ -147,8 +129,7 @@ curl -H "Authorization: Bearer $TOKEN" \
   "version": "1.0.0",
   "services": {
     "gemini": true,
-    "tcg_api": true,
-    "tcg_remaining_requests": 850
+    "tcg_api": true
   }
 }
 ```
@@ -208,13 +189,47 @@ curl -H "Authorization: Bearer $TOKEN" \
 ### ❌ Error Responses
 
 #### 400 Bad Request - Invalid Input
+
+**Invalid Image Format:**
 ```json
 {
-  "error": "validation_error",
-  "message": "Invalid image format. Supported: JPEG, PNG, HEIC, WebP",
+  "error": "unsupported_format",
+  "message": "Unsupported image format. Supported: JPEG, PNG, HEIC, WebP",
   "details": {
-    "field": "image",
     "provided_format": "gif"
+  }
+}
+```
+
+**Invalid Image Data:**
+```json
+{
+  "error": "invalid_image",
+  "message": "Invalid or corrupted image data",
+  "details": {
+    "issue": "Unable to decode base64 image data"
+  }
+}
+```
+
+**Non-TCG Card:**
+```json
+{
+  "error": "non_tcg_card",
+  "message": "This appears to be a Pokemon-related item but not an official TCG card. Please scan an official Pokemon Trading Card Game card.",
+  "details": {
+    "detected_type": "sticker or collectible"
+  }
+}
+```
+
+**Non-Pokemon Card:**
+```json
+{
+  "error": "non_pokemon_card",
+  "message": "This appears to be a Magic: The Gathering card, not a Pokemon card.",
+  "details": {
+    "detected_type": "Magic: The Gathering card"
   }
 }
 ```
@@ -224,6 +239,21 @@ curl -H "Authorization: Bearer $TOKEN" \
 {
   "error": "authentication_required",
   "message": "Valid Google Cloud identity token required for internal service access"
+}
+```
+
+#### 404 Not Found - No Match Found
+```json
+{
+  "error": "no_card_found",
+  "message": "No matching Pokemon card found in our database",
+  "details": {
+    "attempted_search": {
+      "name": "Pikachu",
+      "set": "Base Set",
+      "number": "25"
+    }
+  }
 }
 ```
 
@@ -240,6 +270,20 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 
 #### 422 Unprocessable Entity - Processing Failed
+
+**Card Back Detection:**
+```json
+{
+  "error": "card_back_detected",
+  "message": "This appears to be the back of a Pokemon card. Please take a picture of the front side for identification.",
+  "details": {
+    "card_side": "back",
+    "suggestion": "Flip the card over and photograph the front side"
+  }
+}
+```
+
+**Poor Image Quality:**
 ```json
 {
   "error": "image_quality_too_low",
@@ -271,11 +315,44 @@ curl -H "Authorization: Bearer $TOKEN" \
 #### 500 Internal Server Error - Service Failure
 ```json
 {
-  "error": "service_unavailable",
-  "message": "Gemini AI service temporarily unavailable",
+  "error": "internal_error",
+  "message": "An unexpected error occurred during processing",
+  "details": {
+    "context": "processing"
+  }
+}
+```
+
+#### 502 Bad Gateway - AI Service Error
+```json
+{
+  "error": "ai_service_error",
+  "message": "AI vision service is temporarily unavailable",
   "details": {
     "service": "gemini",
-    "error_code": "QUOTA_EXCEEDED"
+    "original_error": "QUOTA_EXCEEDED"
+  }
+}
+```
+
+#### 503 Service Unavailable - Database Error
+```json
+{
+  "error": "database_error",
+  "message": "Card database service is temporarily unavailable",
+  "details": {
+    "service": "tcg"
+  }
+}
+```
+
+#### 504 Gateway Timeout - Processing Timeout
+```json
+{
+  "error": "timeout_error",
+  "message": "Processing timeout exceeded (60s). Please try again with a simpler image.",
+  "details": {
+    "timeout_seconds": 60
   }
 }
 ```
@@ -318,21 +395,6 @@ curl -H "Authorization: Bearer $TOKEN" \
    - API documentation: http://localhost:8000/docs (if enabled)
    - Service info: http://localhost:8000/api/v1/info
 
-### Development Tools
-
-```bash
-# Code formatting
-uv run black src tests
-
-# Linting
-uv run ruff check src tests
-
-# Type checking
-uv run mypy src
-
-# Run all checks
-uv run black src tests && uv run ruff check src tests && uv run mypy src
-```
 
 ### Getting API Keys
 
@@ -361,7 +423,7 @@ The project includes a comprehensive test suite with 247+ tests covering all maj
 uv run pytest
 
 # Run with coverage report
-uv run pytest --cov=src --cov-report=html
+uv run pytest --cov=src --cov-report=term-missing
 
 # Run specific test file
 uv run pytest tests/unit/services/test_gemini_service.py
@@ -369,28 +431,17 @@ uv run pytest tests/unit/services/test_gemini_service.py
 # Run tests with verbose output
 uv run pytest -v
 
-# Run only fast tests (skip slow integration tests)
-uv run pytest -m "not slow"
 ```
 
 **Coverage Reports:**
-- Terminal: Displayed after test run
-- HTML: Open `htmlcov/index.html` in browser
+- Terminal: Displays coverage percentage and missing line numbers after test run
 
 ### Accuracy Testing
 
 Test the scanner's accuracy against real Pokemon card images:
 
 ```bash
-# Run accuracy tests on sample images
-python simple_accuracy_tester.py
-
-# Test specific card categories
-python simple_accuracy_tester.py --card-type vintage
-python simple_accuracy_tester.py --card-type modern
-python simple_accuracy_tester.py --card-type japanese
-
-# Test with custom image directory
+# Test with image directory
 python simple_accuracy_tester.py --image-dir /path/to/card/images
 
 # Generate detailed report
@@ -488,6 +539,21 @@ The Docker setup uses:
 
 The service is configured as an **internal microservice** with no public internet access.
 
+### 🔐 Authentication
+
+When deployed to Google Cloud Run, the service requires **Google Cloud identity tokens** for authentication:
+
+```bash
+# Get identity token (from another Cloud service)
+TOKEN=$(gcloud auth print-identity-token --audiences="https://your-service-url")
+
+# Use in requests
+curl -H "Authorization: Bearer $TOKEN" \
+  https://your-service-url/api/v1/health
+```
+
+**Note:** This authentication is only required for Cloud Run deployment. Local development and Docker deployments do not require authentication.
+
 ### Quick Deployment
 
 ```bash
@@ -566,8 +632,8 @@ id_token = google.oauth2.id_token.fetch_id_token(auth_req, audience)
 
 # Make authenticated request
 headers = {"Authorization": f"Bearer {id_token}"}
-response = requests.post(f"{audience}/api/v1/scan", 
-                        headers=headers, 
+response = requests.post(f"{audience}/api/v1/scan",
+                        headers=headers,
                         json={"image": image_b64, "filename": "card.jpg"})
 ```
 
@@ -755,161 +821,6 @@ The following settings are hardcoded for stability:
 **Rate Limiting:**
 - Per Minute: 60 requests
 - Burst: 20 requests
-
----
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Service Won't Start
-
-**Error:** `Configuration error: GOOGLE_API_KEY is required`
-```bash
-# Solution: Set required environment variables
-export GOOGLE_API_KEY="your_key_here"
-# Or add to .env file
-echo "GOOGLE_API_KEY=your_key_here" >> .env
-```
-
-**Error:** `Port 8000 already in use`
-```bash
-# Check what's using the port
-lsof -i :8000
-
-# Kill the process or use different port
-export PORT=8080
-```
-
-#### Authentication Issues
-
-**Error:** `Gemini API authentication failed`
-```bash
-# Verify API key is valid
-curl -H "x-goog-api-key: $GOOGLE_API_KEY" \
-  https://generativelanguage.googleapis.com/v1/models
-
-# Check API is enabled
-gcloud services list --enabled --filter="name:generativelanguage.googleapis.com"
-```
-
-**Error:** `401 Unauthorized` on internal service
-```bash
-# Check IAM permissions
-gcloud run services get-iam-policy pokemon-card-scanner --region=us-central1
-
-# Grant invoker role
-gcloud run services add-iam-policy-binding pokemon-card-scanner \
-  --member="serviceAccount:YOUR_SERVICE@PROJECT.iam.gserviceaccount.com" \
-  --role="roles/run.invoker"
-```
-
-#### Processing Issues
-
-**Error:** `Image quality too low for processing`
-- Use better lighting when photographing cards
-- Reduce glare and shadows
-- Ensure card fills most of the frame
-- Try different angles or backgrounds
-
-**Error:** `Rate limit exceeded`
-- Add `POKEMON_TCG_API_KEY` for higher limits
-- Implement request queuing in your application
-- Consider caching results for frequently scanned cards
-
-#### Memory Issues
-
-**Error:** `Memory limit exceeded` in Cloud Run
-```bash
-# Increase memory allocation
-gcloud run services update pokemon-card-scanner \
-  --memory 4Gi \
-  --region us-central1
-```
-
-#### Container Issues
-
-**Error:** Docker build fails
-```bash
-# Clear Docker cache
-docker system prune -a
-
-# Build with no cache
-docker build --no-cache -t pokemon-scanner .
-```
-
-**Error:** Container exits immediately
-```bash
-# Check container logs
-docker logs CONTAINER_ID
-
-# Run interactively for debugging
-docker run -it --entrypoint /bin/bash pokemon-scanner
-```
-
-### Debugging
-
-#### Enable Debug Logging
-
-```bash
-# Local development
-export DEBUG=true
-export LOG_LEVEL=DEBUG
-
-# Cloud Run
-gcloud run services update pokemon-card-scanner \
-  --set-env-vars "DEBUG=true,LOG_LEVEL=DEBUG"
-```
-
-#### View Logs
-
-**Local:**
-```bash
-# Application logs are written to stdout
-uv run python -m src.scanner.main
-
-# Docker logs
-docker logs CONTAINER_ID -f
-```
-
-**Cloud Run:**
-```bash
-# View recent logs
-gcloud logs read --service=pokemon-card-scanner --region=us-central1
-
-# Follow live logs
-gcloud logs tail --service=pokemon-card-scanner --region=us-central1
-```
-
-#### Health Checks
-
-```bash
-# Local health check
-curl http://localhost:8000/api/v1/health
-
-# Internal service health check (requires auth)
-TOKEN=$(gcloud auth print-identity-token --audiences="https://your-service-url")
-curl -H "Authorization: Bearer $TOKEN" https://your-service-url/api/v1/health
-```
-
-#### Performance Monitoring
-
-```bash
-# Get performance metrics
-curl -H "Authorization: Bearer $TOKEN" \
-  https://your-service-url/api/v1/metrics
-
-# Monitor processing times and error rates
-# Set up alerts based on metrics thresholds
-```
-
-### Getting Help
-
-1. **Check the logs** for detailed error messages
-2. **Verify environment variables** are correctly set
-3. **Test API keys** independently to ensure they work
-4. **Check service health** endpoints for dependency status
-5. **Review Cloud Run service** configuration and IAM permissions
 
 ---
 
