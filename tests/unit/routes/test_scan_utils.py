@@ -1,7 +1,18 @@
 """Unit tests for scan route utility functions."""
 
 import pytest
-from src.scanner.routes.scan import is_valid_set_name, is_valid_card_number
+from unittest.mock import Mock, patch
+import sys
+
+# Mock google.generativeai before importing scan module
+mock_genai = Mock()
+mock_genai.GenerativeModel = Mock()
+mock_genai.configure = Mock()
+mock_genai.types = Mock()
+mock_genai.types.GenerationConfig = Mock()
+
+with patch.dict(sys.modules, {'google.generativeai': mock_genai, 'google.api_core.exceptions': Mock()}):
+    from src.scanner.routes.scan import is_valid_set_name, is_valid_card_number
 
 
 class TestIsValidSetName:
