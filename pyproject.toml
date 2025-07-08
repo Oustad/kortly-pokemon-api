@@ -26,6 +26,10 @@ dev = [
     "mypy>=1.16.0",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.12.0",
+    "responses>=0.22.0",
+    "factory-boy>=3.3.0",
     "ruff>=0.11.12",
 ]
 testing = [
@@ -57,3 +61,5 @@ disallow_untyped_defs = true
 minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=80"
+asyncio_mode = "auto"

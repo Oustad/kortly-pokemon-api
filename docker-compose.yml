@@ -6,69 +6,49 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Required: Google API key for Gemini
+      # Core API Configuration (required)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - POKEMON_TCG_API_KEY=${POKEMON_TCG_API_KEY}
       
-      # Optional: Pokemon TCG API key for higher rate limits
-      - POKEMON_TCG_API_KEY=${POKEMON_TCG_API_KEY:-}
-      
-      # Environment configuration
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - DEBUG=${DEBUG:-true}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      
-      # Server configuration
+      # Server Configuration
       - HOST=0.0.0.0
       - PORT=8000
+      - ENVIRONMENT=development
+      - DEBUG=true
       
-      # Gemini AI Configuration
-      - GEMINI_MODEL=${GEMINI_MODEL:-models/gemini-2.5-flash-preview-05-20}
-      - GEMINI_MAX_TOKENS=${GEMINI_MAX_TOKENS:-2000}
-      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.1}
-      
-      # Image Processing Configuration
-      - IMAGE_MAX_DIMENSION=${IMAGE_MAX_DIMENSION:-1024}
-      - IMAGE_JPEG_QUALITY=${IMAGE_JPEG_QUALITY:-85}
-      - IMAGE_MAX_FILE_SIZE_MB=${IMAGE_MAX_FILE_SIZE_MB:-10}
-      
-      # Caching and Performance
-      - CACHE_ENABLED=${CACHE_ENABLED:-true}
-      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
-      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
-      - ENABLE_COST_TRACKING=${ENABLE_COST_TRACKING:-true}
+      # Logging
+      - LOG_LEVEL=INFO
+      - ENABLE_API_DOCS=true
       
       # Security
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - ENABLE_API_DOCS=${ENABLE_API_DOCS:-true}
-    
-    volumes:
-      # Mount processed images directory
-      - ./processed_images:/app/processed_images
-      # Mount logs directory for development
-      - ./logs:/app/logs
-    
+      - CORS_ORIGINS=*
+      
+      # Error Webhooks (optional for development)
+      - ERROR_WEBHOOK_ENABLED=false
+      
+    env_file:
+      - .env
     restart: unless-stopped
-    
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    
+    # Optional: Mount source code for development (uncomment for live reload)
+    # volumes:
+    #   - ./src:/app/src:ro
+    
+    # Optional: Add development command with auto-reload (uncomment for development)
+    # command: ["uvicorn", "src.scanner.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
-  # Optional: Nginx reverse proxy for production
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro  # Mount SSL certificates if available
-      - ./web:/usr/share/nginx/html:ro  # Serve static files
-    depends_on:
-      pokemon-scanner:
-        condition: service_healthy
-    restart: unless-stopped
-    profiles:
-      - production  # Only start with --profile production
+# Optional: Add a reverse proxy for production-like setup
+# nginx:
+#   image: nginx:alpine
+#   ports:
+#     - "80:80"
+#   volumes:
+#     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+#   depends_on:
+#     - pokemon-scanner

@@ -1,0 +1,69 @@
+# Git and version control
+.git
+.gitignore
+
+# Python cache and virtual environments
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+venv/
+venv_test/
+.pytest_cache
+
+# Development and testing
+tests/
+htmlcov/
+.coverage
+.coveragerc
+TEST_COVERAGE_PLAN.md
+TEST_IMPROVEMENT.md
+simple_accuracy_tester.py
+test_*.py
+*_test.py
+
+# Documentation and notes
+*.md
+!README.md
+DEPLOYMENT.md
+CLEANUP_PLAN.md
+IMPROVE_DOCS.md
+WEBHOOK_TESTING.md
+
+# Development tools and configs
+.env
+.env.example
+.ropeproject
+mypy.ini
+.mypy_cache
+
+# Test data and retest images
+retest-images/
+fake_slack_webhook.py
+test_webhook.py
+list_gemini_models.py
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker files (don't include in build context)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Deployment scripts (will be in separate directory)
+deployment/

@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: pokemon-scanner
-  labels:
-    app: pokemon-scanner
-    version: v1.0.0

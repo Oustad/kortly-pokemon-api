@@ -691,139 +691,252 @@ def calculate_match_score(card_data: Dict[str, Any], gemini_params: Dict[str, An
 
 def calculate_match_score_detailed(card_data: Dict[str, Any], gemini_params: Dict[str, Any]) -> tuple[int, Dict[str, int]]:
     """
-    Calculate detailed match score with breakdown.
+    Calculate match score with detailed breakdown for transparency.
+    CRITICAL: Set + Number + Name combinations get MASSIVE priority over name-only matches.
     
-    Args:
-        card_data: Card data from TCG API
-        gemini_params: Parameters extracted from Gemini analysis
-        
     Returns:
-        Tuple of (total_score, score_breakdown)
+        Tuple of (total_score, score_breakdown_dict)
     """
-    score = 0
-    breakdown = {}
+    score_breakdown = {
+        "set_number_name_triple": 0,  # NEW: Highest priority combination
+        "set_number_combo": 0,        # NEW: High priority combination
+        "name_exact": 0,
+        "name_variant_match": 0,      # NEW: Pokemon variant matching (V, VMax, GX, etc.)
+        "name_partial": 0,
+        "name_tag_team_penalty": 0,
+        "number_exact": 0,
+        "number_partial": 0,
+        "number_mismatch_penalty": 0,  # NEW: Penalty for wrong number
+        "hp_match": 0,
+        "type_matches": 0,
+        "set_exact": 0,
+        "set_partial": 0,
+        "set_family_match": 0,        # NEW: For XY family matches
+        "set_size_exact": 0,          # NEW: Set size exact match (Base Set vs Base Set 2)
+        "set_size_close": 0,          # NEW: Set size close match
+        "shiny_vault_bonus": 0,
+        "visual_series_match": 0,      # NEW: Visual feature bonuses
+        "visual_era_match": 0,         # NEW: Visual era consistency
+        "visual_foil_match": 0,        # NEW: Foil pattern match
+        "prime_card_match": 0,
+        "prime_vs_regular_penalty": 0,
+        "missed_prime_penalty": 0,
+        "type_perfect_match": 0,
+        "type_ai_complete_match": 0,
+        "type_partial_match": 0,
+        "type_mismatch_penalty": 0,
+        "type_missing_penalty": 0,
+    }
     
-    # Get card fields safely
-    card_name = card_data.get("name", "").lower()
-    card_set = card_data.get("set", {}).get("name", "").lower() if card_data.get("set") else ""
-    card_number = str(card_data.get("number", "")).strip()
-    card_types = [t.lower() for t in card_data.get("types", [])]
-    card_hp = str(card_data.get("hp", "")).strip()
-    card_rarity = card_data.get("rarity", "").lower()
-    card_total_cards = card_data.get("set", {}).get("total", 0) if card_data.get("set") else 0
+    # Check for critical combination matches first
+    has_set_match = False
+    has_number_match = False
+    has_name_match = False
     
-    # Get Gemini fields safely
-    gemini_name = gemini_params.get("name", "").lower()
-    gemini_set = gemini_params.get("set_name", "").lower()
-    gemini_number = str(gemini_params.get("number", "")).strip()
-    gemini_types = [t.lower() for t in gemini_params.get("types", [])]
-    gemini_hp = str(gemini_params.get("hp", "")).strip()
-    gemini_set_size = gemini_params.get("set_size")
-    
-    # 1. Name matching (most important)
-    name_score = 0
-    if gemini_name and card_name:
-        if is_pokemon_variant_match(gemini_name, card_name):
-            name_score = 400  # High score for variant matches
-        elif gemini_name == card_name:
-            name_score = 500  # Perfect name match
-        elif gemini_name in card_name or card_name in gemini_name:
-            name_score = 300  # Partial name match
-        else:
-            # Check for very close matches (fuzzy matching)
-            gemini_words = set(gemini_name.split())
-            card_words = set(card_name.split())
-            overlap = len(gemini_words & card_words)
-            total_words = len(gemini_words | card_words)
-            if total_words > 0 and overlap / total_words >= 0.6:
-                name_score = 250  # Close word overlap
-    
-    score += name_score
-    breakdown["name_match"] = name_score
-    
-    # 2. Set matching
-    set_score = 0
-    if gemini_set and card_set:
+    # Set name match check with XY family handling
+    if gemini_params.get("set_name") and card_data.get("set", {}).get("name"):
+        gemini_set = str(gemini_params.get("set_name") or "").lower().strip()
+        card_set = str(card_data.get("set", {}).get("name") or "").lower().strip()
+        
         if gemini_set == card_set:
-            set_score = 200  # Perfect set match
-        elif is_xy_family_match(gemini_set, card_set):
-            set_score = 150  # XY family match
+            has_set_match = True
+            score_breakdown["set_exact"] = 2000  # Increased from 200
         elif gemini_set in card_set or card_set in gemini_set:
-            set_score = 100  # Partial set match
-        else:
-            # Check set families
-            gemini_family = get_set_family(gemini_set)
-            if gemini_family and card_set in [s.lower() for s in gemini_family]:
-                set_score = 120  # Set family match
+            # Special handling for XY family sets
+            if is_xy_family_match(gemini_set, card_set):
+                # Within XY family but not exact match - moderate bonus instead of penalty
+                score_breakdown["set_family_match"] = 800
+                logger.debug(f"      XY family match: {gemini_set} <-> {card_set}")
+            else:
+                score_breakdown["set_partial"] = 500  # Increased from 100
     
-    score += set_score
-    breakdown["set_match"] = set_score
-    
-    # 3. Set size matching (helps distinguish between similar sets)
-    set_size_score = 0
-    if gemini_set_size and card_total_cards:
-        if gemini_set_size == card_total_cards:
-            set_size_score = 100  # Exact set size match - strong indicator
-        elif abs(gemini_set_size - card_total_cards) <= 5:
-            set_size_score = 50   # Close set size match
-    
-    score += set_size_score
-    breakdown["set_size_match"] = set_size_score
-    
-    # 4. Card number matching
-    number_score = 0
-    if gemini_number and card_number:
-        # Clean numbers for comparison (remove letters, slashes, etc.)
-        gemini_num_clean = re.sub(r'[^\d]', '', gemini_number)
-        card_num_clean = re.sub(r'[^\d]', '', card_number)
+    # Card number match check
+    if gemini_params.get("number") and card_data.get("number"):
+        gemini_number = str(gemini_params.get("number", "")).strip()
+        card_number = str(card_data.get("number", "")).strip()
         
         if gemini_number == card_number:
-            number_score = 300  # Perfect number match
-        elif gemini_num_clean and card_num_clean and gemini_num_clean == card_num_clean:
-            number_score = 250  # Numbers match (ignoring letters)
+            has_number_match = True
+            score_breakdown["number_exact"] = 2000  # Increased from 1000
         elif gemini_number in card_number or card_number in gemini_number:
-            number_score = 150  # Partial number match
+            score_breakdown["number_partial"] = 800  # Increased from 500
     
-    score += number_score
-    breakdown["number_match"] = number_score
+    # Set size matching check (for Base Set vs Base Set 2 disambiguation)
+    if gemini_params.get("set_size") and card_data.get("set", {}).get("total"):
+        gemini_set_size = gemini_params.get("set_size")
+        card_set_size = card_data.get("set", {}).get("total")
+        
+        if gemini_set_size == card_set_size:
+            score_breakdown["set_size_exact"] = 300  # Bonus for exact set size match
+            logger.debug(f"      Set size exact match: {gemini_set_size} cards")
+        elif abs(gemini_set_size - card_set_size) <= 5:
+            score_breakdown["set_size_close"] = 100  # Small bonus for close set size
+            logger.debug(f"      Set size close match: {gemini_set_size} vs {card_set_size} cards")
     
-    # 5. Type matching
-    type_score = 0
-    if gemini_types and card_types:
-        matching_types = set(gemini_types) & set(card_types)
-        if matching_types:
-            # Score based on how many types match
-            type_score = len(matching_types) * 50
-            if len(matching_types) == len(gemini_types) == len(card_types):
-                type_score += 50  # Bonus for perfect type match
+    # Name matching check with Pokemon variant support
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = gemini_params.get("name", "").lower().strip()
+        card_name = card_data.get("name", "").lower().strip()
+        
+        # Exact name match
+        if gemini_name == card_name:
+            has_name_match = True
+            score_breakdown["name_exact"] = 1500  # Decreased from 2000
+        # Pokemon variant matching (V, VMax, GX, ex, etc.)
+        elif is_pokemon_variant_match(gemini_name, card_name):
+            has_name_match = True  # Treat as name match for combination bonuses
+            score_breakdown["name_variant_match"] = 1400  # High score for variant match
+            logger.debug(f"      Pokemon variant match: '{gemini_name}' <-> '{card_name}'")
+        # Penalize tag team cards when searching for single Pokemon
+        elif "&" in card_name and "&" not in gemini_name:
+            # Card is a tag team but search is for single Pokemon
+            if gemini_name in card_name:
+                score_breakdown["name_partial"] = 100
+                score_breakdown["name_tag_team_penalty"] = -500  # Stronger penalty
+        # Normal partial matches
+        elif gemini_name in card_name or card_name in gemini_name:
+            score_breakdown["name_partial"] = 300
     
-    score += type_score
-    breakdown["type_match"] = type_score
+    # PRIME CARD SPECIAL HANDLING
+    if gemini_params.get("name") and card_data.get("name"):
+        gemini_name = str(gemini_params.get("name", "")).lower().strip()
+        card_name = str(card_data.get("name", "")).lower().strip()
+        
+        # Both are Prime cards - strong bonus
+        if "prime" in gemini_name and "prime" in card_name:
+            score_breakdown["prime_card_match"] = 800
+            logger.debug(f"      Prime card match bonus: {gemini_name} <-> {card_name}")
+        
+        # AI detected Prime but card is not Prime - penalty
+        elif "prime" in gemini_name and "prime" not in card_name:
+            # Check if the base Pokemon name matches (e.g., "Houndoom Prime" vs "Houndoom")
+            base_gemini_name = gemini_name.replace(" prime", "").strip()
+            if base_gemini_name in card_name:
+                score_breakdown["prime_vs_regular_penalty"] = -400
+                logger.debug(f"      Prime vs regular penalty: {gemini_name} <-> {card_name}")
+        
+        # Card is Prime but AI didn't detect - smaller penalty
+        elif "prime" not in gemini_name and "prime" in card_name:
+            base_card_name = card_name.replace(" prime", "").strip()
+            if base_card_name in gemini_name:
+                score_breakdown["missed_prime_penalty"] = -200
     
-    # 6. HP matching
-    hp_score = 0
-    if gemini_hp and card_hp:
+    # CRITICAL COMBINATION BONUSES
+    # Triple match: Set + Number + Name = MASSIVE bonus
+    if has_set_match and has_number_match and has_name_match:
+        score_breakdown["set_number_name_triple"] = 5000  # HUGE bonus for perfect match
+    # Dual match: Set + Number = Large bonus
+    elif has_set_match and has_number_match:
+        score_breakdown["set_number_combo"] = 3000  # Large bonus for set+number match
+    
+    # CRITICAL PENALTY: If we have a specific number from AI but card doesn't match, HEAVILY penalize
+    if gemini_params.get("number") and card_data.get("number"):
+        gemini_number = str(gemini_params.get("number", "")).strip()
+        card_number = str(card_data.get("number", "")).strip()
+        
+        # If numbers are completely different (not even partial match), massive penalty
+        if gemini_number != card_number and gemini_number not in card_number and card_number not in gemini_number:
+            score_breakdown["number_mismatch_penalty"] = -2000  # Heavy penalty for wrong number
+    
+    # HP match (medium priority)
+    if gemini_params.get("hp") and card_data.get("hp"):
+        gemini_hp = str(gemini_params.get("hp", "")).strip()
+        card_hp = str(card_data.get("hp", "")).strip()
+        
         if gemini_hp == card_hp:
-            hp_score = 100  # Perfect HP match
-        elif gemini_hp.isdigit() and card_hp.isdigit():
-            # Allow for small differences in HP
-            hp_diff = abs(int(gemini_hp) - int(card_hp))
-            if hp_diff <= 10:
-                hp_score = 80 - (hp_diff * 5)  # Decreasing score for larger differences
+            score_breakdown["hp_match"] = 400
     
-    score += hp_score
-    breakdown["hp_match"] = hp_score
+    # Types match (HIGH priority - critical for correct identification)
+    card_types = card_data.get("types", [])
+    gemini_types = gemini_params.get("types", [])
     
-    # 7. Rarity bonus (small bonus for rare cards)
-    rarity_score = 0
-    rare_rarities = ["rare", "ultra rare", "secret rare", "legendary", "holo rare"]
-    if any(rare in card_rarity for rare in rare_rarities):
-        rarity_score = 20  # Small bonus for rare cards
+    if gemini_types and card_types:
+        # Convert to standardized format for comparison
+        card_types_clean = [str(t).strip().title() for t in card_types if t]
+        gemini_types_clean = [str(t).strip().title() for t in gemini_types if t]
+        
+        # Count matching types
+        matching_types = len([t for t in gemini_types_clean if t in card_types_clean])
+        total_gemini_types = len(gemini_types_clean)
+        total_card_types = len(card_types_clean)
+        
+        if matching_types > 0:
+            # Strong bonus for matching types
+            if matching_types == total_gemini_types and matching_types == total_card_types:
+                # Perfect type match (all types match exactly)
+                score_breakdown["type_perfect_match"] = 800
+            elif matching_types == total_gemini_types:
+                # All AI-detected types match (partial match)
+                score_breakdown["type_ai_complete_match"] = 600
+            else:
+                # Some types match
+                score_breakdown["type_partial_match"] = matching_types * 300
+        else:
+            # MAJOR PENALTY for completely wrong types (e.g., Fire vs Darkness)
+            if total_gemini_types > 0 and total_card_types > 0:
+                score_breakdown["type_mismatch_penalty"] = -1500
+                logger.debug(f"      Type mismatch penalty: AI detected {gemini_types_clean} but card has {card_types_clean}")
     
-    score += rarity_score
-    breakdown["rarity_bonus"] = rarity_score
+    elif gemini_types and not card_types:
+        # AI detected types but card has none - minor penalty
+        score_breakdown["type_missing_penalty"] = -200
     
-    return score, breakdown
+    # Special case: Shiny Vault cards
+    if card_data.get("number", "").startswith("SV") and gemini_params.get("set_name") == "Hidden Fates":
+        score_breakdown["shiny_vault_bonus"] = 300
+    
+    # VISUAL FEATURE MATCHING - Critical for differentiating similar cards
+    visual_features = gemini_params.get("visual_features", {})
+    if visual_features:
+        # Card series matching (e-Card, EX, XY, etc.)
+        if visual_features.get("card_series"):
+            gemini_series = str(visual_features["card_series"]).lower() if visual_features["card_series"] else ""
+            # Map card series to likely set patterns
+            series_patterns = {
+                "e-card": ["aquapolis", "skyridge", "expedition"],
+                "ex": ["ruby", "sapphire", "emerald", "firered", "leafgreen"],
+                "xy": ["xy", "breakpoint", "breakthrough", "fates collide", "steam siege", "evolutions", 
+                       "flashfire", "furious fists", "phantom forces", "primal clash", "roaring skies", "ancient origins"],
+                "sun moon": ["sun", "moon", "ultra", "cosmic", "guardians rising", "burning shadows", 
+                            "crimson invasion", "forbidden light", "celestial storm", "lost thunder"],
+                "sword shield": ["sword", "shield", "battle styles", "chilling reign", "rebel clash", 
+                                "darkness ablaze", "vivid voltage", "evolving skies", "fusion strike"],
+            }
+            
+            card_set_name = card_data.get("set", {}).get("name") or ""
+            card_set_name = card_set_name.lower() if card_set_name else ""
+            for series, patterns in series_patterns.items():
+                if series in gemini_series:
+                    if card_set_name and any(pattern in card_set_name for pattern in patterns):
+                        score_breakdown["visual_series_match"] = 500  # Significant bonus for series match
+                        break
+        
+        # Visual era consistency (vintage cards should match vintage sets)
+        if visual_features.get("visual_era"):
+            gemini_era = str(visual_features["visual_era"]).lower() if visual_features["visual_era"] else ""
+            card_set_name = card_data.get("set", {}).get("name") or ""
+            card_set_name = card_set_name.lower() if card_set_name else ""
+            
+            # Era-based set categorization
+            if "vintage" in gemini_era or "classic" in gemini_era:
+                vintage_sets = ["base", "jungle", "fossil", "aquapolis", "skyridge", "expedition"]
+                if card_set_name and any(vintage in card_set_name for vintage in vintage_sets):
+                    score_breakdown["visual_era_match"] = 300
+            elif "modern" in gemini_era:
+                modern_indicators = ["xy", "sun", "moon", "sword", "shield", "scarlet", "violet"]
+                if card_set_name and any(modern in card_set_name for modern in modern_indicators):
+                    score_breakdown["visual_era_match"] = 300
+        
+        # Foil pattern matching (helps distinguish variants)
+        if visual_features.get("foil_pattern"):
+            foil_pattern = str(visual_features["foil_pattern"]).lower() if visual_features["foil_pattern"] else ""
+            # This would require more detailed card data analysis
+            # For now, give small bonus for any foil detection
+            if any(word in foil_pattern for word in ["holo", "foil", "crystal", "rainbow", "cosmos"]):
+                score_breakdown["visual_foil_match"] = 100
+    
+    total_score = sum(score_breakdown.values())
+    return total_score, score_breakdown
 
 
 def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str, Any]) -> tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
