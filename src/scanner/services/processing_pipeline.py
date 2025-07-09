@@ -82,12 +82,24 @@ class ProcessingPipeline:
             
             # Check if quality score is below acceptable threshold
             if quality_result['quality_score'] < 40:
-                return self._create_error_result(
+                result = self._create_error_result(
                     "Image quality too low for accurate scanning",
                     quality_result,
                     processing_log,
                     start_time
                 )
+                # Add error_type for proper handling in scan route
+                result['error_type'] = 'image_quality'
+                result['quality_score'] = quality_result.get('quality_score', 0.0)
+                result['quality_issues'] = []
+                
+                # Extract specific quality issues
+                if quality_result.get('details', {}).get('blur_score', 100) < 20:
+                    result['quality_issues'].append("Image is too blurry")
+                if quality_result.get('details', {}).get('card_detection_confidence', 0) < 50:
+                    result['quality_issues'].append("Card not clearly visible in image")
+                
+                return result
             
             processing_config = self._determine_processing_config(quality_result['quality_score'], user_preferences)
             tier = processing_config['tier']  # Extract tier for backwards compatibility

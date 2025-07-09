@@ -30,11 +30,6 @@ class Config:
         self.gemini_max_retries = 3
         self.gemini_timeout_seconds = 60
 
-
-        self.gemini_rate_limit_rpm = 8
-        self.gemini_rate_limit_enabled = True
-
-
         self.image_max_dimension = 1024
         self.image_jpeg_quality = 85
         self.image_max_file_size_mb = 10

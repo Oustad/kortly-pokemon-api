@@ -134,7 +134,7 @@ async def scan_pokemon_card(request: ScanRequest) -> ScanResponse:
                 quality_score = pipeline_result.get("quality_score", 0)
                 error_details = create_image_quality_error(
                     quality_score=quality_score,
-                    issues=pipeline_result.get("quality_issues", []),
+                    specific_issues=pipeline_result.get("quality_issues", []),
                     request_id=None
                 )
             elif error_type == "non_tcg_card":

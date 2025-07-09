@@ -239,6 +239,10 @@ class PokemonTcgClient:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 raise RateLimitError("API rate limit exceeded") from e
+            elif e.response.status_code == 404:
+                # Pokemon TCG API returns 404 when no cards match the search criteria
+                logger.info("   ← No results found (404)")
+                return {"data": [], "totalCount": 0}
             elif e.response.status_code >= 400:
                 error_data = e.response.json() if e.response.content else {}
                 logger.error(f"   ✗ API error {e.response.status_code}: {error_data}")
