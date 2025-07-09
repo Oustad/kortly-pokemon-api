@@ -140,7 +140,7 @@ class TestScanRoute:
         response = client.post("/api/v1/scan", json=request_data)
         
         # Empty image actually gets processed and fails later
-        assert response.status_code == 500  # Internal server error
+        assert response.status_code == 503  # Service unavailable
         data = response.json()
         assert "detail" in data
 

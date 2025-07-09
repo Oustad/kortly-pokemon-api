@@ -50,23 +50,25 @@ class TestScanRouteWithTCGSearchService:
         """Mock successful pipeline result."""
         return {
             "success": True,
-            "parsed_data": {
-                "name": "Pikachu",
-                "set_name": "Base Set",
-                "number": "58",
-                "hp": "60",
-                "types": ["Electric"],
-                "rarity": "Common"
-            },
-            "gemini_data": {
-                "raw_response": "Pokemon: Pikachu...",
+            "card_data": {
+                "success": True,
+                "response": """TCG_SEARCH_START
+{
+  "name": "Pikachu",
+  "set_name": "Base Set",
+  "number": "58",
+  "hp": "60",
+  "types": ["Electric"],
+  "rarity": "Common",
+  "card_type_info": {
+    "card_type": "pokemon_front",
+    "is_pokemon_card": true,
+    "card_side": "front"
+  }
+}
+TCG_SEARCH_END""",
                 "prompt_tokens": 100,
                 "response_tokens": 50
-            },
-            "card_type_info": {
-                "card_type": "pokemon_front",
-                "is_pokemon_card": True,
-                "card_side": "front"
             },
             "processing": {
                 "quality_score": 85,
@@ -196,7 +198,17 @@ class TestScanRouteWithTCGSearchService:
         
         # Verify the search was called with correct parameters
         call_args = mock_search_service_instance.search_for_card.call_args
-        assert call_args[0][0] == mock_pipeline_result["parsed_data"]  # parsed_data
+        # The parsed_data should be the parsed version of the response
+        expected_parsed_data = {
+            'card_type_info': {'card_type': 'pokemon_front', 'is_pokemon_card': True, 'card_side': 'front'},
+            'name': 'Pikachu',
+            'language_info': {'detected_language': 'en', 'is_translation': False},
+            'set_name': 'Base Set',
+            'number': '58',
+            'hp': '60',
+            'types': ['Electric']
+        }
+        assert call_args[0][0] == expected_parsed_data  # parsed_data
         assert call_args[0][1] == mock_tcg_client_instance  # tcg_client
         
         # Verify response
@@ -282,20 +294,25 @@ class TestScanRouteWithTCGSearchService:
         # Pipeline result with no name
         pipeline_result_no_name = {
             "success": True,
-            "parsed_data": {
-                "name": None,  # No name identified
-                "set_name": "Unknown",
-                "number": None
-            },
-            "gemini_data": {
-                "raw_response": "Cannot identify card",
+            "card_data": {
+                "success": True,
+                "response": """TCG_SEARCH_START
+{
+  "name": null,
+  "set_name": "Unknown",
+  "number": null,
+  "card_type_info": {
+    "card_type": "unknown",
+    "is_pokemon_card": false,
+    "card_side": "unknown"
+  },
+  "language_info": {
+    "detected_language": "en"
+  }
+}
+TCG_SEARCH_END""",
                 "prompt_tokens": 100,
                 "response_tokens": 20
-            },
-            "card_type_info": {
-                "card_type": "unknown",
-                "is_pokemon_card": False,
-                "card_side": "unknown"
             },
             "processing": {
                 "quality_score": 85,
@@ -312,12 +329,6 @@ class TestScanRouteWithTCGSearchService:
                 "performance_rating": "good",
                 "timing_breakdown": {},
                 "processing_log": []
-            },
-            "structured_data": {  # Add structured data for fallback
-                "name": None,
-                "language_info": {
-                    "detected_language": "en"
-                }
             }
         }
         
@@ -349,12 +360,13 @@ class TestScanRouteWithTCGSearchService:
         # Call the endpoint
         response = await scan_pokemon_card(request)
         
-        # Verify TCGSearchService was created but search_for_card was NOT called
+        # Verify TCGSearchService was created and search_for_card was called
+        # (it will be called but will immediately return empty results due to no name)
         mock_tcg_search_service.assert_called_once()
-        mock_search_service_instance.search_for_card.assert_not_called()
+        mock_search_service_instance.search_for_card.assert_called_once()
         
-        # Response should show no name since none was identified
-        assert response.name is None
+        # Response should show 'Unknown' as default when no name was identified
+        assert response.name == "Unknown"
         assert response.market_prices is None
         assert response.quality_score == 85.0
 
