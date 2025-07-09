@@ -21,7 +21,7 @@ class TestScanRouteSimple:
     @pytest.fixture
     def sample_image_base64(self):
         """Create sample image as base64."""
-        img = Image.new('RGB', (400, 600), color='blue')
+        img = Image.new('RGB', (400, 600), color=(0, 0, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         image_data = img_buffer.getvalue()

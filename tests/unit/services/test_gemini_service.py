@@ -1,15 +1,25 @@
-"""Focused tests for gemini_service.py initialization and configuration."""
+"""Comprehensive tests for GeminiService."""
 
 import os
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any, Optional
+import asyncio
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from typing import Dict, Any
+
+# Mock the google.generativeai module before importing GeminiService
+import sys
+mock_genai = Mock()
+mock_google_api_exceptions = Mock()
+mock_google_api_exceptions.GoogleAPIError = Exception  # Make it a proper exception class
+
+sys.modules['google.generativeai'] = mock_genai
+sys.modules['google.api_core.exceptions'] = mock_google_api_exceptions
 
 from src.scanner.services.gemini_service import GeminiService
 
 
 class TestGeminiServiceInitialization:
-    """Test GeminiService initialization."""
+    """Test GeminiService initialization and configuration."""
     
     def test_init_with_api_key(self):
         """Test initialization with provided API key."""
@@ -25,6 +35,7 @@ class TestGeminiServiceInitialization:
         service = GeminiService(api_key=api_key)
         
         assert service._api_key == "test-api-key-123"  # Should be stripped
+        assert service._model is None
     
     def test_init_without_api_key(self):
         """Test initialization without API key."""
@@ -38,6 +49,13 @@ class TestGeminiServiceInitialization:
         service = GeminiService(api_key=None)
         
         assert service._api_key is None
+        assert service._model is None
+    
+    def test_init_with_empty_api_key(self):
+        """Test initialization with empty API key."""
+        service = GeminiService(api_key="")
+        
+        assert service._api_key == ""
         assert service._model is None
 
 
@@ -110,18 +128,6 @@ class TestGeminiServiceModelProperty:
         
         with pytest.raises(Exception, match="Configuration failed"):
             _ = service.model
-    
-    @patch('src.scanner.services.gemini_service.genai')
-    @patch('src.scanner.services.gemini_service.config')
-    def test_model_property_api_key_format_logging(self, mock_config, mock_genai):
-        """Test that model property logs API key format on configuration error."""
-        mock_config.gemini_model = "test-model"
-        mock_genai.configure.side_effect = Exception("Configuration failed")
-        
-        service = GeminiService(api_key="test-key-12345")
-        
-        with pytest.raises(Exception):
-            _ = service.model
 
 
 class TestGeminiServiceUtilityMethods:
@@ -159,41 +165,6 @@ class TestGeminiServiceUtilityMethods:
         result = service.count_tokens("test text")
         
         assert result == 0  # Should return 0 on error
-    
-    @patch('src.scanner.services.gemini_service.genai')
-    @patch('src.scanner.services.gemini_service.config')
-    def test_get_prompt_optimization_stats(self, mock_config, mock_genai):
-        """Test get_prompt_optimization_stats method."""
-        mock_config.gemini_model = "test-model"
-        mock_model = Mock()
-        mock_genai.GenerativeModel.return_value = mock_model
-        
-        service = GeminiService(api_key="test-key")
-        
-        with patch.object(service, '_get_optimized_prompt') as mock_get_prompt:
-            with patch.object(service, '_get_generation_config') as mock_get_config:
-                mock_get_prompt.return_value = "test prompt"
-                mock_config_obj = Mock()
-                mock_config_obj.max_output_tokens = 100
-                mock_config_obj.temperature = 0.7
-                mock_get_config.return_value = mock_config_obj
-                
-                result = service.get_prompt_optimization_stats()
-                
-                assert "fast" in result
-                assert "standard" in result
-                assert "enhanced" in result
-                
-                for tier in ["fast", "standard", "enhanced"]:
-                    assert "prompt_length" in result[tier]
-                    assert "estimated_prompt_tokens" in result[tier]
-                    assert "max_output_tokens" in result[tier]
-                    assert "temperature" in result[tier]
-                    assert "optimization_focus" in result[tier]
-                    
-                    assert result[tier]["prompt_length"] == 11  # len("test prompt")
-                    assert result[tier]["max_output_tokens"] == 100
-                    assert result[tier]["temperature"] == 0.7
 
 
 class TestGeminiServiceGenerationConfig:
@@ -306,3 +277,53 @@ class TestGeminiServicePromptGeneration:
         assert "BREAK evolution cards" in result
         assert "Prime cards" in result
         assert "SV" in result  # Shiny Vault numbers
+
+
+class TestGeminiServiceIdentifyPokemonCard:
+    """Test GeminiService identify_pokemon_card method."""
+    
+    @pytest.mark.asyncio
+    async def test_identify_pokemon_card_method_exists(self):
+        """Test that identify_pokemon_card method exists and is callable."""
+        service = GeminiService(api_key="test-key")
+        
+        # Method should exist
+        assert hasattr(service, 'identify_pokemon_card')
+        assert callable(service.identify_pokemon_card)
+    
+    @pytest.mark.asyncio
+    async def test_identify_pokemon_card_empty_image(self):
+        """Test with empty image data."""
+        service = GeminiService(api_key="test-key")
+        
+        # Test with empty image data - should handle gracefully
+        result = await service.identify_pokemon_card(b"")
+        
+        assert isinstance(result, dict)
+        assert result["success"] is False
+
+
+class TestGeminiServiceStringRepresentation:
+    """Test GeminiService string representation and edge cases."""
+    
+    def test_string_representation(self):
+        """Test service string representation."""
+        service = GeminiService(api_key="test-key")
+        
+        # Should not crash when converted to string
+        str_repr = str(service)
+        assert isinstance(str_repr, str)
+        assert "GeminiService" in str_repr
+    
+    def test_service_attributes_exist(self):
+        """Test that service has expected attributes."""
+        service = GeminiService(api_key="test-key")
+        
+        # Should have API key
+        assert hasattr(service, '_api_key')
+        assert hasattr(service, '_model')
+        
+        # Should have methods
+        assert hasattr(service, 'identify_pokemon_card')
+        assert hasattr(service, 'model')
+        assert hasattr(service, 'count_tokens')

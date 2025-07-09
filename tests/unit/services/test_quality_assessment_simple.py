@@ -17,7 +17,7 @@ class TestQualityAssessmentSimple:
     @pytest.fixture
     def sample_image_bytes(self):
         """Create sample image bytes."""
-        img = Image.new('RGB', (400, 600), color='blue')
+        img = Image.new('RGB', (400, 600), color=(0, 0, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         return img_buffer.getvalue()
@@ -25,7 +25,7 @@ class TestQualityAssessmentSimple:
     @pytest.fixture
     def high_quality_image_bytes(self):
         """Create high quality image bytes."""
-        img = Image.new('RGB', (800, 1200), color='white')
+        img = Image.new('RGB', (800, 1200), color=(255, 255, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=95)
         return img_buffer.getvalue()
@@ -33,7 +33,7 @@ class TestQualityAssessmentSimple:
     @pytest.fixture
     def low_quality_image_bytes(self):
         """Create low quality image bytes."""
-        img = Image.new('RGB', (100, 150), color='gray')
+        img = Image.new('RGB', (100, 150), color=(128, 128, 128))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=30)
         return img_buffer.getvalue()
@@ -162,7 +162,7 @@ class TestQualityAssessmentSimple:
     def test_different_image_formats(self, quality_assessor):
         """Test assessment of different image formats."""
         # Create PNG image
-        img = Image.new('RGB', (300, 400), color='red')
+        img = Image.new('RGB', (300, 400), color=(255, 0, 0))
         
         # PNG format
         png_buffer = io.BytesIO()
@@ -195,7 +195,7 @@ class TestQualityAssessmentSimple:
     def test_very_large_image(self, quality_assessor):
         """Test assessment of very large image."""
         # Create large image
-        img = Image.new('RGB', (2000, 3000), color='green')
+        img = Image.new('RGB', (2000, 3000), color=(0, 255, 0))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=85)
         
@@ -210,7 +210,7 @@ class TestQualityAssessmentSimple:
     def test_very_small_image(self, quality_assessor):
         """Test assessment of very small image."""
         # Create tiny image
-        img = Image.new('RGB', (50, 75), color='yellow')
+        img = Image.new('RGB', (50, 75), color=(255, 255, 0))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         

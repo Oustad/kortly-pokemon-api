@@ -4,15 +4,38 @@ import pytest
 from unittest.mock import Mock, patch
 import sys
 
-# Mock google.generativeai before importing scan module
-mock_genai = Mock()
-mock_genai.GenerativeModel = Mock()
-mock_genai.configure = Mock()
-mock_genai.types = Mock()
-mock_genai.types.GenerationConfig = Mock()
+# Store the original modules to restore later
+_original_modules = {}
 
-with patch.dict(sys.modules, {'google.generativeai': mock_genai, 'google.api_core.exceptions': Mock()}):
-    from src.scanner.routes.scan import is_valid_set_name, is_valid_card_number
+@pytest.fixture(autouse=True)
+def mock_google_modules():
+    """Mock Google modules for all tests in this file."""
+    mock_genai = Mock()
+    mock_genai.GenerativeModel = Mock()
+    mock_genai.configure = Mock()
+    mock_genai.types = Mock()
+    mock_genai.types.GenerationConfig = Mock()
+    
+    # Store original modules if they exist
+    for module_name in ['google.generativeai', 'google.api_core.exceptions']:
+        if module_name in sys.modules:
+            _original_modules[module_name] = sys.modules[module_name]
+    
+    # Apply mocks
+    with patch.dict(sys.modules, {'google.generativeai': mock_genai, 'google.api_core.exceptions': Mock()}):
+        yield
+    
+    # Restore original modules
+    for module_name, original_module in _original_modules.items():
+        sys.modules[module_name] = original_module
+    
+    # Remove mocked modules that weren't there originally
+    for module_name in ['google.generativeai', 'google.api_core.exceptions']:
+        if module_name not in _original_modules and module_name in sys.modules:
+            del sys.modules[module_name]
+
+# Import after fixtures are set up
+from src.scanner.routes.scan import is_valid_set_name, is_valid_card_number
 
 
 class TestIsValidSetName:

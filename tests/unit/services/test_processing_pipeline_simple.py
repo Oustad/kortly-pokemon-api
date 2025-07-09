@@ -25,7 +25,7 @@ class TestProcessingPipelineSimple:
     @pytest.fixture
     def sample_image_bytes(self):
         """Create sample image bytes."""
-        img = Image.new('RGB', (400, 600), color='blue')
+        img = Image.new('RGB', (400, 600), color=(0, 0, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         return img_buffer.getvalue()

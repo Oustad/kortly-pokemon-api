@@ -17,7 +17,7 @@ class TestImageProcessorSimple:
     @pytest.fixture
     def sample_image_bytes(self):
         """Create sample image bytes."""
-        img = Image.new('RGB', (400, 600), color='blue')
+        img = Image.new('RGB', (400, 600), color=(0, 0, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         return img_buffer.getvalue()
@@ -25,7 +25,7 @@ class TestImageProcessorSimple:
     @pytest.fixture
     def large_image_bytes(self):
         """Create large image bytes."""
-        img = Image.new('RGB', (2000, 3000), color='red')
+        img = Image.new('RGB', (2000, 3000), color=(255, 0, 0))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         return img_buffer.getvalue()
@@ -95,7 +95,7 @@ class TestImageProcessorSimple:
     def test_process_image_different_formats(self, image_processor):
         """Test processing different image formats."""
         # Create PNG image
-        img = Image.new('RGB', (300, 400), color='green')
+        img = Image.new('RGB', (300, 400), color=(0, 255, 0))
         png_buffer = io.BytesIO()
         img.save(png_buffer, format='PNG')
         png_bytes = png_buffer.getvalue()
@@ -175,7 +175,7 @@ class TestImageProcessorSimple:
     def test_process_image_maintains_quality(self, image_processor):
         """Test that processing maintains reasonable image quality."""
         # Create high quality image
-        img = Image.new('RGB', (800, 1200), color='white')
+        img = Image.new('RGB', (800, 1200), color=(255, 255, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=95)
         high_quality_bytes = img_buffer.getvalue()

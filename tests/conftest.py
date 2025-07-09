@@ -39,7 +39,7 @@ def test_config():
 def sample_card_image():
     """Create a sample card image for testing."""
     # Create a simple test image
-    img = Image.new('RGB', (400, 600), color='blue')
+    img = Image.new('RGB', (400, 600), color=(0, 0, 255))
     img_buffer = io.BytesIO()
     img.save(img_buffer, format='JPEG')
     img_buffer.seek(0)
@@ -55,7 +55,7 @@ def sample_card_image_base64(sample_card_image):
 @pytest.fixture
 def sample_blurry_image():
     """Create a blurry test image."""
-    img = Image.new('RGB', (200, 300), color='gray')
+    img = Image.new('RGB', (200, 300), color=(128, 128, 128))
     img_buffer = io.BytesIO()
     img.save(img_buffer, format='JPEG', quality=20)
     img_buffer.seek(0)
@@ -65,7 +65,7 @@ def sample_blurry_image():
 @pytest.fixture
 def sample_high_quality_image():
     """Create a high quality test image."""
-    img = Image.new('RGB', (800, 1200), color='white')
+    img = Image.new('RGB', (800, 1200), color=(255, 255, 255))
     # Add some detail/texture
     for x in range(0, 800, 50):
         for y in range(0, 1200, 50):
@@ -252,7 +252,7 @@ class TestImageFactory:
     """Factory for creating test images."""
     
     @staticmethod
-    def create_card_image(width=400, height=600, color='blue', quality=95):
+    def create_card_image(width=400, height=600, color=(0, 0, 255), quality=95):
         """Create a test card image."""
         img = Image.new('RGB', (width, height), color=color)
         img_buffer = io.BytesIO()
@@ -261,7 +261,7 @@ class TestImageFactory:
         return img_buffer.getvalue()
     
     @staticmethod
-    def create_base64_image(width=400, height=600, color='blue', quality=95):
+    def create_base64_image(width=400, height=600, color=(0, 0, 255), quality=95):
         """Create a base64 encoded test image."""
         image_data = TestImageFactory.create_card_image(width, height, color, quality)
         return base64.b64encode(image_data).decode('utf-8')

@@ -21,7 +21,7 @@ class TestScanEndpointFocused:
     @pytest.fixture
     def valid_image_base64(self):
         """Create valid base64 image for testing."""
-        img = Image.new('RGB', (400, 600), color='blue')
+        img = Image.new('RGB', (400, 600), color=(0, 0, 255))
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG')
         image_data = img_buffer.getvalue()
