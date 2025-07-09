@@ -41,8 +41,8 @@ class GeminiService:
                     logger.info(f"Configured Gemini with API key (length: {len(self._api_key)})")
                 except Exception as e:
                     logger.error(f"Failed to configure Gemini API: {e}")
-                    # Try to log more details without exposing the key
-                    logger.error(f"API key format check - starts with: {self._api_key[:8]}..., ends with: ...{self._api_key[-4:]}")
+                    # Log key presence without exposing any part of it
+                    logger.error(f"API key present: {bool(self._api_key)}, length: {len(self._api_key) if self._api_key else 0}")
                     raise
             else:
                 logger.warning(
@@ -137,7 +137,6 @@ class GeminiService:
                         image_bytes=image_bytes,
                         optimize_for_speed=optimize_for_speed,
                         retry_unlimited=True,
-                        processing_tier=processing_tier,
                     )
 
                 # Check if we have valid content

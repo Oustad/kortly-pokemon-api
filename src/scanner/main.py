@@ -52,10 +52,15 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
+# Configure CORS - Note: allow_credentials=True cannot be used with allow_origins=["*"]
+# If credentials are needed, specific origins must be configured via CORS_ORIGINS env var
+cors_origins = config.cors_origins
+allow_credentials = True if cors_origins != ["*"] else False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.cors_origins,
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

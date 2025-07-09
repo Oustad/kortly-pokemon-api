@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from ..models.schemas import PokemonCard, ProcessingInfo, GeminiAnalysis, ScanResponse, AlternativeMatch, MatchScore
+from ..models.schemas import PokemonCard, ProcessingInfo, GeminiAnalysis, ScanResponse, AlternativeMatch
 
 logger = logging.getLogger(__name__)
 

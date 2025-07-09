@@ -195,8 +195,7 @@ def get_set_from_total_count(total_count: int) -> Optional[str]:
     count_to_set = {
         102: "Base Set",
         130: "Base Set 2",
-        132: "Gym Heroes",
-        132: "Gym Challenge",
+        # Both Gym Heroes and Gym Challenge have 132 cards, so we can't reliably distinguish by count
         111: "Neo Genesis",
         75: "Neo Discovery",
         64: "Neo Revelation",

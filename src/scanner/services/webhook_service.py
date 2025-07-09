@@ -1,7 +1,5 @@
 """Webhook notification service for error reporting."""
 
-import asyncio
-import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -48,6 +46,11 @@ class WebhookService:
             True if notification was sent successfully, False otherwise
         """
         if not config.error_webhook_enabled or not config.error_webhook_url:
+            return False
+        
+        # Validate webhook URL format
+        if not self._is_valid_url(config.error_webhook_url):
+            logger.error(f"Invalid webhook URL format: {config.error_webhook_url[:50]}...")
             return False
             
         # Check if level meets minimum threshold
@@ -134,6 +137,35 @@ class WebhookService:
             payload["traceback"] = traceback
             
         return payload
+    
+    def _is_valid_url(self, url: str) -> bool:
+        """Validate URL format."""
+        if not url:
+            return False
+        
+        # Basic URL validation - must start with http:// or https://
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return False
+        
+        # Must have a domain after the protocol
+        if url in ["http://", "https://"]:
+            return False
+        
+        # Check for basic URL structure
+        try:
+            # Simple validation - split by protocol and check domain exists
+            parts = url.split("://", 1)
+            if len(parts) != 2:
+                return False
+            
+            domain_part = parts[1]
+            # Must have at least a domain
+            if not domain_part or domain_part.startswith("/"):
+                return False
+            
+            return True
+        except Exception:
+            return False
     
     async def close(self):
         """Close the HTTP client."""

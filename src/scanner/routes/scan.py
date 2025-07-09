@@ -2,7 +2,6 @@
 
 import base64
 import logging
-import re
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -25,22 +24,13 @@ from ..models.schemas import (
     ScanResponse,
 )
 from ..services.card_matcher import (
-    calculate_match_score_detailed,
-    correct_set_based_on_number_pattern,
-    correct_xy_set_based_on_number,
-    extract_set_name_from_symbol,
-    get_set_family,
-    is_pokemon_variant_match,
-    is_xy_family_match,
     select_best_match,
 )
 from ..services.response_parser import (
-    contains_vague_indicators,
     create_simplified_response,
     parse_gemini_response,
 )
 from ..services.error_handler import (
-    ErrorType,
     create_image_quality_error,
     create_non_tcg_card_error,
     create_card_back_error,
@@ -51,7 +41,6 @@ from ..services.error_handler import (
     handle_unexpected_error,
 )
 from ..services.gemini_service import GeminiService
-from ..services.image_processor import ImageProcessor
 from ..services.metrics_service import get_metrics_service, RequestMetrics
 from ..services.processing_pipeline import ProcessingPipeline
 from ..services.tcg_client import PokemonTcgClient
@@ -69,7 +58,7 @@ MINIMUM_SCORE_THRESHOLD = 750  # Cards below this score are likely wrong matches
 
 
 @router.post("/scan", responses={500: {"model": ErrorResponse}})
-async def scan_pokemon_card(request: ScanRequest):
+async def scan_pokemon_card(request: ScanRequest) -> ScanResponse:
     """
     Scan a Pokemon card and return detailed information.
 
