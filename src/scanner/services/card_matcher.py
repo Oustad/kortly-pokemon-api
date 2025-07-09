@@ -965,7 +965,7 @@ def select_best_match(tcg_results: List[Dict[str, Any]], gemini_params: Dict[str
         })
 
     # Sort by score (highest first)
-    def advanced_sort_key(match):
+    def advanced_sort_key(match) -> tuple:
         # Primary sort: score
         # Secondary sort: prefer cards with more complete data
         card = match["card"]

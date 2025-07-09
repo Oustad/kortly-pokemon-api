@@ -1,5 +1,6 @@
 """Service for interacting with Google Gemini API for Pokemon card identification."""
 
+import asyncio
 import io
 import logging
 import os
@@ -29,7 +30,7 @@ class GeminiService:
             self._api_key = api_key
 
     @property
-    def model(self):
+    def model(self) -> Any:
         """Lazy load the Gemini model."""
         if self._model is None:
             if self._api_key:
@@ -71,7 +72,8 @@ class GeminiService:
         try:
             logger.info("🤖 Calling Gemini API for Pokemon card identification...")
 
-            pil_image = Image.open(io.BytesIO(image_bytes))
+            # Use asyncio.to_thread to prevent blocking the event loop with PIL operations
+            pil_image = await asyncio.to_thread(Image.open, io.BytesIO(image_bytes))
 
             if optimize_for_speed:
                 # Resize image to reduce processing time while maintaining quality
@@ -79,7 +81,9 @@ class GeminiService:
                 if max(pil_image.size) > max_dimension:
                     ratio = max_dimension / max(pil_image.size)
                     new_size = tuple(int(dim * ratio) for dim in pil_image.size)
-                    pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
+                    pil_image = await asyncio.to_thread(
+                        pil_image.resize, new_size, Image.Resampling.LANCZOS
+                    )
                     logger.info(f"Resized image to {new_size} for faster processing")
 
             prompt = self._get_optimized_prompt()

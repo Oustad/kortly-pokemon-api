@@ -69,7 +69,7 @@ class MetricsService:
         self.response_times = []  # Last 1000 response times for percentiles
         self._hourly_metrics = defaultdict(lambda: ServiceMetrics())
     
-    def record_request(self, request_metrics: RequestMetrics):
+    def record_request(self, request_metrics: RequestMetrics) -> None:
         """Record metrics for a completed request."""
         if not config.enable_metrics:
             return
@@ -131,7 +131,7 @@ class MetricsService:
             k: v for k, v in self._hourly_metrics.items() if k >= cutoff
         }
     
-    def _update_response_times(self, processing_time_ms: float):
+    def _update_response_times(self, processing_time_ms: float) -> None:
         """Update response time statistics."""
         # Update min/max
         self.metrics.min_response_time_ms = min(
@@ -150,12 +150,12 @@ class MetricsService:
         if self.response_times:
             self.metrics.avg_response_time_ms = sum(self.response_times) / len(self.response_times)
     
-    def record_cache_hit(self):
+    def record_cache_hit(self) -> None:
         """Record a cache hit."""
         if config.enable_metrics:
             self.metrics.cache_hits += 1
     
-    def record_cache_miss(self):
+    def record_cache_miss(self) -> None:
         """Record a cache miss."""
         if config.enable_metrics:
             self.metrics.cache_misses += 1
