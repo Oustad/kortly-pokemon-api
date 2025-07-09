@@ -43,9 +43,7 @@ The Pokemon Card Scanner is a production-ready **internal microservice** that us
 - **🤖 AI-Powered Identification**: Google Gemini 2.0 Flash for accurate card recognition
 - **🎯 TCG Database Integration**: Comprehensive Pokemon card database matching with 95%+ accuracy
 - **📱 Multi-Format Support**: JPEG, PNG, HEIC, WebP with automatic optimization
-- **⚡ Lightning Fast**: Sub-2-second processing with optimized image handling
 - **💰 Cost Effective**: ~$0.003-0.005 per scan with real-time cost tracking
-- **🔒 Secure Internal Service**: No public internet access, identity-based authentication
 - **📊 Comprehensive Monitoring**: Health checks, metrics, and error notifications
 - **🛡️ Production Ready**: Rate limiting, security headers, and webhook notifications
 
@@ -422,9 +420,6 @@ The project includes a comprehensive test suite with 247+ tests covering all maj
 # Run all tests
 uv run pytest
 
-# Run with coverage report
-uv run pytest --cov=src --cov-report=term-missing
-
 # Run specific test file
 uv run pytest tests/unit/services/test_gemini_service.py
 
@@ -442,10 +437,10 @@ Test the scanner's accuracy against real Pokemon card images:
 
 ```bash
 # Test with image directory
-python simple_accuracy_tester.py --image-dir /path/to/card/images
+uv run simple_accuracy_tester.py --image-dir /path/to/card/images
 
 # Generate detailed report
-python simple_accuracy_tester.py --output-file accuracy_report.json
+uv run simple_accuracy_tester.py --output-file accuracy_report.json
 ```
 
 ### Webhook Testing
@@ -454,7 +449,7 @@ Test error notification webhooks locally:
 
 1. **Start the fake webhook server:**
    ```bash
-   python fake_slack_webhook.py
+   uv run fake_slack_webhook.py
    ```
    This starts a local server on `http://localhost:3000` that mimics Slack's webhook API.
 
@@ -467,7 +462,7 @@ Test error notification webhooks locally:
 
 3. **Run webhook tests:**
    ```bash
-   python test_webhook.py
+   uv run test_webhook.py
    ```
 
 4. **Manual testing:**

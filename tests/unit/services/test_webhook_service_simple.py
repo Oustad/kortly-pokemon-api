@@ -197,12 +197,13 @@ class TestWebhookServiceSimple:
                 # Should respect rate limiting and return False
                 assert result is False
 
-    def test_webhook_service_cleanup_method(self, webhook_service):
+    @pytest.mark.asyncio
+    async def test_webhook_service_cleanup_method(self, webhook_service):
         """Test cleanup/close method if it exists."""
         if hasattr(webhook_service, 'close'):
             # Should be able to call cleanup
             try:
-                webhook_service.close()
+                await webhook_service.close()
             except Exception:
                 # Should handle cleanup gracefully
                 pass

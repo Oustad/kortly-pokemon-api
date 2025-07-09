@@ -78,7 +78,7 @@ class ErrorDetails:
             response["details"] = self.details
         
         if self.quality_feedback:
-            response["quality_feedback"] = self.quality_feedback.dict()
+            response["quality_feedback"] = self.quality_feedback.model_dump()
         
         if self.suggestions:
             response["suggestions"] = self.suggestions

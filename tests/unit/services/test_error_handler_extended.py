@@ -185,7 +185,7 @@ class TestErrorDetails:
         assert result["error_type"] == "image_quality_too_low"
         assert result["error_code"] == "image_quality_too_low"
         assert result["details"] == {"key": "value"}
-        assert result["quality_feedback"] == quality_feedback.dict()
+        assert result["quality_feedback"] == quality_feedback.model_dump()
         assert result["suggestions"] == ["suggestion 1"]
         assert result["quality_score"] == 25.5
         assert result["authenticity_score"] == 30
