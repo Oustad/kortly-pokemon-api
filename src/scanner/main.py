@@ -15,13 +15,8 @@ from .middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
 from .routes import health, metrics, scan
 from .services.webhook_service import send_error_webhook
 
-# Load environment variables
 load_dotenv()
-
-# Get configuration
 config = get_config()
-
-# Configure logging using config
 logging.config.dictConfig(config.get_log_config())
 logger = logging.getLogger(__name__)
 
@@ -29,7 +24,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
-    # Startup
     logger.info("🚀 Starting Pokemon Card Scanner API...")
     
     # Verify configuration including API keys
@@ -42,11 +36,9 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown
     logger.info("👋 Shutting down Pokemon Card Scanner API...")
 
 
-# Create FastAPI app
 app = FastAPI(
     title="Pokemon Card Scanner API",
     description="Production-ready Pokemon card scanner using Gemini AI and Pokemon TCG API",
@@ -57,11 +49,9 @@ app = FastAPI(
     openapi_url="/openapi.json" if config.enable_api_docs else None,
 )
 
-# Add security middleware
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.cors_origins,
@@ -70,7 +60,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle all unhandled exceptions."""
@@ -105,7 +94,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
-# Include routers
 app.include_router(health.router)
 app.include_router(scan.router)
 app.include_router(metrics.router)

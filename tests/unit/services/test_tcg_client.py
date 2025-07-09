@@ -12,7 +12,6 @@ class TestPokemonTcgClientSimple:
         """Test basic client initialization."""
         client = PokemonTcgClient()
         
-        # Check basic properties that actually exist
         assert hasattr(client, 'api_key')
         assert hasattr(client, 'base_url')
         assert hasattr(client, 'rate_limit')  # Not rate_window
@@ -41,11 +40,9 @@ class TestPokemonTcgClientSimple:
         """Test that set name mappings are available."""
         client = PokemonTcgClient()
         
-        # Check the mapping exists
         assert hasattr(client, 'SET_NAME_MAPPINGS')
         assert isinstance(client.SET_NAME_MAPPINGS, dict)
         
-        # Check some known mappings
         mappings = client.SET_NAME_MAPPINGS
         if "Hidden Fates" in mappings:
             assert mappings["Hidden Fates"] == "Hidden Fates Shiny Vault"
@@ -55,11 +52,9 @@ class TestPokemonTcgClientSimple:
         """Test that search_cards method exists and can be called."""
         client = PokemonTcgClient()
         
-        # Mock the HTTP client to avoid real API calls
         with patch.object(client, '_make_request', new_callable=AsyncMock) as mock_request:
             mock_request.return_value = {"data": [], "totalCount": 0}
             
-            # Method should exist and be callable
             result = await client.search_cards(name="Pikachu")
             
             # Method returns the raw response, not just the data list
@@ -69,9 +64,7 @@ class TestPokemonTcgClientSimple:
         """Test set name normalization if it exists."""
         client = PokemonTcgClient()
         
-        # Check if method exists
         if hasattr(client, '_normalize_set_name'):
-            # Test basic functionality
             result = client._normalize_set_name("Hidden Fates")
             assert isinstance(result, str)
 
@@ -99,7 +92,6 @@ class TestPokemonTcgClientSimple:
         """Test that client has cache-related attributes."""
         client = PokemonTcgClient()
         
-        # Should have cache TTL setting
         assert hasattr(client, 'cache_ttl')
         assert isinstance(client.cache_ttl, int)
 
@@ -108,21 +100,18 @@ class TestPokemonTcgClientSimple:
         """Test that client handles errors gracefully."""
         client = PokemonTcgClient()
         
-        # Test with invalid parameters
         with patch.object(client, '_make_request', new_callable=AsyncMock) as mock_request:
             mock_request.side_effect = Exception("Network error")
             
             try:
                 await client.search_cards(name="Test")
             except Exception as e:
-                # Should handle errors without crashing
                 assert isinstance(e, Exception)
 
     def test_client_string_representation(self):
         """Test client string representation."""
         client = PokemonTcgClient()
         
-        # Should not crash when converted to string
         str_repr = str(client)
         assert isinstance(str_repr, str)
 
@@ -133,7 +122,6 @@ class TestPokemonTcgClientSimple:
             rate_limit=200
         )
         
-        # Should be able to access without errors
         assert client.api_key == "test-key"
         assert client.rate_limit == 200
         assert client.cache_ttl > 0

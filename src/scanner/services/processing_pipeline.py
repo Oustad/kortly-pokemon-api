@@ -66,7 +66,6 @@ class ProcessingPipeline:
         processing_log = []
         
         try:
-            # Step 1: Quality Assessment
             assessment_start = time.time()
             quality_result = self.quality_assessor.assess_image_quality(image_bytes)
             assessment_time = (time.time() - assessment_start) * 1000
@@ -90,14 +89,12 @@ class ProcessingPipeline:
                     start_time
                 )
             
-            # Step 2: Get Processing Configuration
             processing_config = self._determine_processing_config(quality_result['quality_score'], user_preferences)
             tier = processing_config['tier']  # Extract tier for backwards compatibility
             tier_config = self.tier_configs[tier]
             
             processing_log.append(f"Using comprehensive analysis with authenticity detection (quality: {quality_result['quality_score']:.1f})")
             
-            # Step 3: Image Preprocessing
             preprocess_start = time.time()
             processed_image_bytes = await self._preprocess_image(
                 image_bytes, 
@@ -108,7 +105,6 @@ class ProcessingPipeline:
             
             processing_log.append(f"Image preprocessing: {preprocess_time:.1f}ms")
             
-            # Step 4: Comprehensive Gemini Analysis with Authenticity Detection
             gemini_start = time.time()
             gemini_result = await self.gemini_service.identify_pokemon_card(
                 processed_image_bytes,
@@ -127,7 +123,6 @@ class ProcessingPipeline:
                     start_time
                 )
             
-            # Step 5: Compile Results
             total_time = (time.time() - start_time) * 1000
             
             return self._create_success_result(

@@ -91,7 +91,6 @@ async def scan_pokemon_card(request: ScanRequest):
     start_time = time.time()
 
     try:
-        # Step 1: Decode and validate image
         logger.info("📸 Processing card scan request...")
         try:
             image_data = base64.b64decode(request.image)
@@ -99,7 +98,6 @@ async def scan_pokemon_card(request: ScanRequest):
             logger.error(f"Invalid base64 image data: {e}")
             raise HTTPException(status_code=400, detail="Invalid base64 image data")
 
-        # Initialize services
         logger.debug("🔧 Initializing services...")
         try:
             gemini_service = GeminiService(api_key=config.google_api_key)
@@ -112,7 +110,6 @@ async def scan_pokemon_card(request: ScanRequest):
             )
             raise_pokemon_scanner_error(error_details)
 
-        # Create processing pipeline
         try:
             pipeline = ProcessingPipeline(gemini_service)
         except Exception as e:
@@ -124,12 +121,10 @@ async def scan_pokemon_card(request: ScanRequest):
             )
             raise_pokemon_scanner_error(error_details)
 
-        # Initialize cost tracking
         cost_tracker = None
         if request.options.include_cost_tracking and config.enable_cost_tracking:
             cost_tracker = CostTracker()
 
-        # Step 2: Process image through pipeline
         logger.info("🎨 Processing image through AI pipeline...")
         try:
             pipeline_result = await pipeline.process_image(
@@ -141,7 +136,6 @@ async def scan_pokemon_card(request: ScanRequest):
             logger.error(f"Pipeline processing failed: {e}")
             handle_unexpected_error(e, context="pipeline_processing")
 
-        # Handle pipeline errors
         if not pipeline_result.get("success", False):
             error_type = pipeline_result.get("error_type", "unknown")
             error_message = pipeline_result.get("error", "Unknown error occurred")
@@ -176,7 +170,6 @@ async def scan_pokemon_card(request: ScanRequest):
 
             raise_pokemon_scanner_error(error_details)
 
-        # Extract Gemini result and parse for TCG search
         gemini_data = pipeline_result.get('card_data')
         if not gemini_data:
             raise HTTPException(
@@ -244,14 +237,12 @@ async def scan_pokemon_card(request: ScanRequest):
                 operation="identify_card",
             )
 
-        # Step 3: Search TCG database
         logger.info("🎯 Searching Pokemon TCG database...")
         tcg_start = time.time()
 
         # Use API key for production capacity (20,000 requests/day vs 1,000)
         tcg_client = PokemonTcgClient(api_key=config.pokemon_tcg_api_key)
         
-        # Use the new TCG search service
         tcg_search_service = TCGSearchService()
         tcg_search_start = time.time()
         all_search_results, search_attempts, tcg_matches = await tcg_search_service.search_for_card(
@@ -325,7 +316,6 @@ async def scan_pokemon_card(request: ScanRequest):
                 else:
                     confidence = "low"
 
-                # Generate human-readable reasoning
                 reasoning = []
                 breakdown = match_info["score_breakdown"]
 
@@ -373,15 +363,12 @@ async def scan_pokemon_card(request: ScanRequest):
                 )
                 all_match_scores.append(match_score)
 
-            # Find best match card
             if best_match_data:
-                # Find the corresponding PokemonCard object
                 for card in tcg_matches:
                     if card.id == best_match_data["id"]:
                         best_match_card = card
                         break
 
-            # Track TCG usage
             if request.options.include_cost_tracking and config.enable_cost_tracking:
                 cost_tracker.track_tcg_usage("search")
         else:
@@ -389,7 +376,6 @@ async def scan_pokemon_card(request: ScanRequest):
 
         tcg_time = (time.time() - tcg_start) * 1000
 
-        # Build comprehensive processing info
         processing_metadata = pipeline_result['processing']
         quality_feedback = QualityFeedback(
             overall=processing_metadata['quality_feedback']['overall'],
@@ -416,7 +402,6 @@ async def scan_pokemon_card(request: ScanRequest):
             ]
         )
 
-        # Prepare cost info
         cost_info = None
         if request.options.include_cost_tracking:
             cost_info = CostInfo(
@@ -429,7 +414,6 @@ async def scan_pokemon_card(request: ScanRequest):
                 },
             )
 
-        # Determine success based on card type and results
         scan_success = True
         error_message = None
 
@@ -463,15 +447,12 @@ async def scan_pokemon_card(request: ScanRequest):
             # Fallback to original logic if no card type info
             scan_success = True  # Default to success for now
 
-        # Calculate total processing time
         total_time = (time.time() - start_time) * 1000
 
-        # Get best match score from scored matches
         best_match_score = 0
         if all_scored_matches:
             best_match_score = all_scored_matches[0].get("score", 0)
 
-        # Record metrics before returning
         logger.info(f"✅ Scan complete: {len(tcg_matches) if tcg_matches else 0} matches found in {total_time:.0f}ms")
 
         metrics_service = get_metrics_service()
@@ -486,7 +467,6 @@ async def scan_pokemon_card(request: ScanRequest):
             tcg_matches=len(tcg_matches) if tcg_matches else 0,
         ))
 
-        # Return unified response format
         return create_simplified_response(
             best_match=best_match_card,
             processing_info=processing_info,
@@ -496,7 +476,6 @@ async def scan_pokemon_card(request: ScanRequest):
         )
 
     except HTTPException as e:
-        # Log and send webhook for HTTP errors
         error_context = {
             "status_code": e.status_code,
             "filename": request.filename,
@@ -514,17 +493,14 @@ async def scan_pokemon_card(request: ScanRequest):
 
         raise
     except Exception as e:
-        # Calculate total time even on error
         total_time = (time.time() - start_time) * 1000
 
-        # Prepare error context for webhook
         error_context = {
             "filename": request.filename,
             "processing_time_ms": int(total_time),
             "error_type": type(e).__name__,
         }
 
-        # Send webhook notification
         await send_error_webhook(
             error_message=f"Card scan failed: {str(e)}",
             level="ERROR",
@@ -533,7 +509,6 @@ async def scan_pokemon_card(request: ScanRequest):
             traceback=str(e),
         )
 
-        # Record error metrics
         metrics_service = get_metrics_service()
         metrics_service.record_request(RequestMetrics(
             timestamp=datetime.now(),

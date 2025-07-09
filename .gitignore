@@ -58,3 +58,9 @@ test_results/*.html
 test_results/test_state.json
 test_results/raw_results.json
 *.HEIC
+
+# Additional virtual environments
+venv_test/
+
+# All HTML reports
+*.html

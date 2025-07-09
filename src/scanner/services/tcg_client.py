@@ -139,7 +139,6 @@ class PokemonTcgClient:
         else:
             logger.warning("⚠️ Pokemon TCG API client initialized without API key - limited to 1,000 requests/day")
         
-        # Simple in-memory cache
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.request_timestamps: List[float] = []
         
@@ -167,12 +166,10 @@ class PokemonTcgClient:
         now = time.time()
         hour_ago = now - 3600
         
-        # Remove timestamps older than 1 hour
         self.request_timestamps = [
             ts for ts in self.request_timestamps if ts > hour_ago
         ]
         
-        # Check if we've exceeded the limit
         return len(self.request_timestamps) >= self.rate_limit
 
     def _get_cache_key(self, endpoint: str, params: Optional[Dict] = None) -> str:
@@ -188,7 +185,6 @@ class PokemonTcgClient:
             if entry.get("expires_at", 0) > time.time():
                 return entry.get("data")
             else:
-                # Expired, remove from cache
                 del self.cache[cache_key]
         return None
 
@@ -208,17 +204,14 @@ class PokemonTcgClient:
         self, method: str, endpoint: str, **kwargs
     ) -> Dict[str, Any]:
         """Make an HTTP request with rate limiting and error handling."""
-        # Check rate limit
         if self._is_rate_limited():
             logger.warning(f"🚫 Rate limit exceeded: {self.rate_limit} requests per hour")
             raise RateLimitError(
                 f"Rate limit exceeded: {self.rate_limit} requests per hour"
             )
         
-        # Record request timestamp
         self.request_timestamps.append(time.time())
         
-        # Log request
         url = f"{self.base_url}{endpoint}"
         logger.info(f"🌐 Pokemon TCG API Request: {method} {url}")
         if kwargs.get("params"):
@@ -230,10 +223,8 @@ class PokemonTcgClient:
             response.raise_for_status()
             request_time = time.time() - start_time
             
-            # Log response
             logger.info(f"   ✓ Response: {response.status_code} in {request_time:.2f}s")
             
-            # Parse JSON response
             data = response.json()
             
             # Log data summary
@@ -287,13 +278,11 @@ class PokemonTcgClient:
         Returns:
             API response with matching cards
         """
-        # Build query parameters
         params = {
             "page": page,
             "pageSize": min(page_size, 250),  # API max is 250
         }
         
-        # Build query string with normalization
         query_parts = []
         if name:
             # Normalize Pokemon name for better matching
@@ -326,19 +315,15 @@ class PokemonTcgClient:
         if order_by:
             params["orderBy"] = order_by
             
-        # Create cache key
         cache_key = self._get_cache_key("/cards", params)
         
-        # Check cache
         cached_data = self._get_from_cache(cache_key)
         if cached_data is not None:
             logger.info("📦 Cache hit for card search")
             return cached_data
             
-        # Make request
         data = await self._make_request("GET", "/cards", params=params)
         
-        # Cache response
         self._add_to_cache(cache_key, data)
         
         return data
@@ -353,7 +338,6 @@ class PokemonTcgClient:
         Returns:
             Card data
         """
-        # Check cache
         cache_key = self._get_cache_key(f"/cards/{card_id}")
         cached_data = self._get_from_cache(cache_key)
         if cached_data is not None:
@@ -361,10 +345,8 @@ class PokemonTcgClient:
             return cached_data
             
         logger.info(f"🔍 Fetching card from API: {card_id}")
-        # Make request
         data = await self._make_request("GET", f"/cards/{card_id}")
         
-        # Cache response
         self._add_to_cache(cache_key, data)
         logger.info(f"   💾 Cached card: {card_id}")
         

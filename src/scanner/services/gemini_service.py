@@ -71,7 +71,6 @@ class GeminiService:
         try:
             logger.info("🤖 Calling Gemini API for Pokemon card identification...")
 
-            # Convert bytes to PIL Image and optimize for speed
             pil_image = Image.open(io.BytesIO(image_bytes))
 
             if optimize_for_speed:
@@ -83,13 +82,9 @@ class GeminiService:
                     pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
                     logger.info(f"Resized image to {new_size} for faster processing")
 
-            # Get comprehensive analysis prompt with authenticity detection
             prompt = self._get_optimized_prompt()
-
-            # Configure optimized generation settings
             generation_config = self._get_generation_config(retry_unlimited)
 
-            # Configure permissive safety settings for trading card analysis
             safety_settings = [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},

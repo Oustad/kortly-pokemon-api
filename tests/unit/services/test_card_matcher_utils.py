@@ -9,7 +9,6 @@ class TestGetSetFamily:
 
     def test_base_set_families(self):
         """Test base set family mappings."""
-        # Base set variations
         assert get_set_family("base") == ["Base Set", "Base", "Base Set 2"]
         assert get_set_family("Base") == ["Base Set", "Base", "Base Set 2"]
         assert get_set_family("BASE") == ["Base Set", "Base", "Base Set 2"]
@@ -195,27 +194,22 @@ class TestGetSetFamily:
 
     def test_edge_cases(self):
         """Test edge cases for set family function."""
-        # Empty and None cases
         assert get_set_family(None) is None
         assert get_set_family("") is None
         
-        # Unknown sets should return None
         assert get_set_family("Unknown Set") is None
         assert get_set_family("Fake Set Name") is None
         assert get_set_family("Not A Real Set") is None
 
     def test_whitespace_handling(self):
         """Test handling of sets with different whitespace."""
-        # Test sets with extra whitespace
         assert get_set_family("  base  ") is None  # Doesn't handle whitespace trimming
         
-        # Test exact matches only
         assert get_set_family("base") == ["Base Set", "Base", "Base Set 2"]
         assert get_set_family("base set") == ["Base Set", "Base", "Base Set 2"]
 
     def test_partial_matches(self):
         """Test that partial matches don't work."""
-        # These should not match because they're not exact matches
         assert get_set_family("bas") is None
         assert get_set_family("gym hero") is None
         assert get_set_family("black white") is None  # Missing &
@@ -233,15 +227,11 @@ class TestGetSetFamily:
         ]
         
         for set_name in newer_sets:
-            # These should return None since they're not in the mapping
             result = get_set_family(set_name.lower())
-            # We don't assert anything specific since the mapping might be incomplete
-            # Just verify the function doesn't crash
             assert result is None or isinstance(result, list)
 
     def test_special_character_sets(self):
         """Test sets with special characters."""
-        # Test sets that have special characters in their names
         special_char_sets = [
             ("ruby & sapphire", ["Ruby & Sapphire"]),
             ("firered & leafgreen", ["FireRed & LeafGreen"]),
@@ -255,12 +245,10 @@ class TestGetSetFamily:
 
     def test_return_type_consistency(self):
         """Test that return types are consistent."""
-        # Valid sets should return lists
         result = get_set_family("base")
         assert isinstance(result, list)
         assert all(isinstance(item, str) for item in result)
         
-        # Invalid sets should return None
         assert get_set_family("invalid") is None
         assert get_set_family("") is None
         assert get_set_family(None) is None
@@ -278,7 +266,6 @@ class TestIsXYFamilyMatch:
             "generations", "fates collide", "steam siege", "evolutions"
         ]
         
-        # Test all combinations of XY sets
         for set1 in xy_sets[:5]:  # Test subset to keep test size reasonable
             for set2 in xy_sets[:5]:
                 assert is_xy_family_match(set1, set2), f"'{set1}' and '{set2}' should match"
@@ -316,7 +303,6 @@ class TestIsXYFamilyMatch:
 
     def test_edge_cases_xy_family(self):
         """Test edge cases for XY family matching."""
-        # Empty and None cases
         assert not is_xy_family_match(None, "xy")
         assert not is_xy_family_match("xy", None)
         assert not is_xy_family_match(None, None)
@@ -326,7 +312,6 @@ class TestIsXYFamilyMatch:
 
     def test_specific_xy_sets(self):
         """Test specific XY set combinations."""
-        # Test all XY base variants
         xy_base_variants = ["xy", "xy base", "xy base set", "kalos starter set"]
         for variant in xy_base_variants:
             assert is_xy_family_match(variant, "flashfire")
@@ -340,7 +325,6 @@ class TestIsXYFamilyMatch:
             "generations", "fates collide", "steam siege", "evolutions"
         ]
         
-        # All expansions should match with base XY
         for expansion in xy_expansions:
             assert is_xy_family_match("xy", expansion)
             assert is_xy_family_match(expansion, "xy")
@@ -351,24 +335,20 @@ class TestGetSetFromTotalCount:
 
     def test_known_set_counts(self):
         """Test known set total counts."""
-        # Test some counts that should return set names
         known_counts = [102, 111, 130, 165, 64, 95, 100]
         
         for count in known_counts:
             result = get_set_from_total_count(count)
-            # Should return a set name string for known counts
             assert result is None or isinstance(result, str)
             if result is not None:
-                assert len(result) > 0  # Non-empty string
+                assert len(result) > 0
 
     def test_unknown_counts(self):
         """Test unknown set counts."""
-        # Use counts that are definitely not in the mapping
         unknown_counts = [1, 2, 3, 500, 999, 1500, 2000]
         
         for count in unknown_counts:
             result = get_set_from_total_count(count)
-            # Unknown counts should return None
             assert result is None
 
     def test_zero_and_negative_counts(self):
@@ -377,7 +357,6 @@ class TestGetSetFromTotalCount:
         
         for count in invalid_counts:
             result = get_set_from_total_count(count)
-            # Invalid counts should return None
             assert result is None
 
     def test_large_counts(self):
@@ -386,15 +365,12 @@ class TestGetSetFromTotalCount:
         
         for count in large_counts:
             result = get_set_from_total_count(count)
-            # Large counts should return None
             assert result is None
 
     def test_return_type(self):
         """Test that return type is consistent."""
-        # Test with a known count
         result = get_set_from_total_count(102)
         assert result is None or isinstance(result, str)
         
-        # Test with unknown count
         result = get_set_from_total_count(999)
         assert result is None
