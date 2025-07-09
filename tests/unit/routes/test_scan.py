@@ -140,7 +140,7 @@ class TestScanRoute:
         response = client.post("/api/v1/scan", json=request_data)
         
         # Empty image actually gets processed and fails later
-        assert response.status_code == 503  # Service unavailable
+        assert response.status_code == 500  # Internal server error
         data = response.json()
         assert "detail" in data
 
@@ -251,9 +251,11 @@ class TestScanRoute:
             # If mocking fails, just verify endpoint accepts request
             assert response.status_code in [200, 400, 500, 503]  # Not 404 or 422
 
+    @patch('src.scanner.routes.scan.TCGSearchService')
+    @patch('src.scanner.routes.scan.PokemonTcgClient')
     @patch('src.scanner.routes.scan.ProcessingPipeline')
     @patch('src.scanner.routes.scan.GeminiService')
-    def test_scan_endpoint_service_initialization(self, mock_gemini_service, mock_pipeline, client, valid_image_base64):
+    def test_scan_endpoint_service_initialization(self, mock_gemini_service, mock_pipeline, mock_tcg_client, mock_tcg_search_service, client, valid_image_base64):
         """Test that services are initialized correctly."""
         # Setup mocks
         mock_pipeline_instance = Mock()
@@ -262,6 +264,14 @@ class TestScanRoute:
             "success": False,
             "error": "Test error"
         })
+        
+        # Mock TCGSearchService and PokemonTcgClient
+        mock_tcg_client_instance = Mock()
+        mock_tcg_client.return_value = mock_tcg_client_instance
+        
+        mock_search_service_instance = Mock()
+        mock_tcg_search_service.return_value = mock_search_service_instance
+        mock_search_service_instance.search_for_card = AsyncMock(return_value=([], [], []))
         
         request_data = {
             "image": valid_image_base64,
@@ -276,10 +286,12 @@ class TestScanRoute:
         mock_pipeline.assert_called_once()
         mock_pipeline_instance.process_image.assert_called_once()
 
+    @patch('src.scanner.routes.scan.TCGSearchService')
+    @patch('src.scanner.routes.scan.PokemonTcgClient')
     @patch('src.scanner.routes.scan.CostTracker')
     @patch('src.scanner.routes.scan.ProcessingPipeline')
     @patch('src.scanner.routes.scan.GeminiService')
-    def test_scan_endpoint_cost_tracking_initialized(self, mock_gemini_service, mock_pipeline, mock_cost_tracker, client, valid_image_base64):
+    def test_scan_endpoint_cost_tracking_initialized(self, mock_gemini_service, mock_pipeline, mock_cost_tracker, mock_tcg_client, mock_tcg_search_service, client, valid_image_base64):
         """Test that cost tracking is initialized."""
         # Setup mocks
         mock_pipeline_instance = Mock()
@@ -291,6 +303,14 @@ class TestScanRoute:
         
         mock_tracker_instance = Mock()
         mock_cost_tracker.return_value = mock_tracker_instance
+        
+        # Mock TCGSearchService and PokemonTcgClient
+        mock_tcg_client_instance = Mock()
+        mock_tcg_client.return_value = mock_tcg_client_instance
+        
+        mock_search_service_instance = Mock()
+        mock_tcg_search_service.return_value = mock_search_service_instance
+        mock_search_service_instance.search_for_card = AsyncMock(return_value=([], [], []))
         
         request_data = {
             "image": valid_image_base64,

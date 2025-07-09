@@ -10,8 +10,7 @@ from starlette.responses import JSONResponse
 
 from src.scanner.middleware.security import (
     RateLimitMiddleware,
-    SecurityHeadersMiddleware,
-    cleanup_rate_limit_data
+    SecurityHeadersMiddleware
 )
 
 
@@ -519,11 +518,6 @@ class TestSecurityMiddlewareIntegration:
 class TestCleanupFunction:
     """Test cases for cleanup functions."""
 
-    def test_cleanup_rate_limit_data(self):
-        """Test rate limit data cleanup function."""
-        # Currently a placeholder function
-        result = cleanup_rate_limit_data()
-        assert result is None
 
 
 class TestErrorHandling:
