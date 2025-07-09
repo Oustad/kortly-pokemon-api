@@ -1,4 +1,4 @@
-"""Extended tests for CostTracker utility to achieve higher coverage."""
+"""Comprehensive tests for cost_tracker.py - consolidated from simple and extended tests."""
 
 import pytest
 from datetime import datetime, timedelta
@@ -9,13 +9,27 @@ from src.scanner.utils.cost_tracker import CostTracker
 class TestCostTrackerInitialization:
     """Test CostTracker initialization and configuration."""
 
+    @pytest.fixture
+    def cost_tracker(self):
+        """Create CostTracker instance."""
+        return CostTracker()
+
+    def test_initialization_basic(self, cost_tracker):
+        """Test basic initialization."""
+        assert cost_tracker.session_costs == []
+        assert isinstance(cost_tracker.session_start, datetime)
+        
+        # Check that pricing constants exist
+        assert hasattr(cost_tracker, 'GEMINI_COSTS')
+        assert hasattr(cost_tracker, 'TCG_API_COSTS')
+
     def test_initialization_creates_empty_session(self):
         """Test that initialization creates empty session."""
         tracker = CostTracker()
         
         assert tracker.session_costs == []
         assert isinstance(tracker.session_start, datetime)
-        
+
     def test_initialization_sets_current_time(self):
         """Test that initialization sets current time."""
         before_init = datetime.now()
@@ -53,9 +67,51 @@ class TestTrackGeminiUsage:
     """Test Gemini usage tracking functionality."""
 
     @pytest.fixture
+    def cost_tracker(self):
+        """Create CostTracker instance."""
+        return CostTracker()
+
+    @pytest.fixture
     def tracker(self):
         """Create a fresh CostTracker instance."""
         return CostTracker()
+
+    def test_track_gemini_usage_basic(self, cost_tracker):
+        """Test basic Gemini usage tracking."""
+        cost = cost_tracker.track_gemini_usage(
+            prompt_tokens=100,
+            response_tokens=50,
+            includes_image=False,
+            operation="test"
+        )
+        
+        # Should return a numeric cost
+        assert isinstance(cost, (int, float))
+        assert cost >= 0
+        
+        # Should record the usage
+        assert len(cost_tracker.session_costs) == 1
+        record = cost_tracker.session_costs[0]
+        assert record["service"] == "gemini"
+        assert record["prompt_tokens"] == 100
+        assert record["response_tokens"] == 50
+
+    def test_track_gemini_usage_with_image(self, cost_tracker):
+        """Test Gemini usage with image."""
+        cost = cost_tracker.track_gemini_usage(
+            prompt_tokens=100,
+            response_tokens=50,
+            includes_image=True
+        )
+        
+        # Should be higher cost with image
+        cost_without_image = cost_tracker.track_gemini_usage(
+            prompt_tokens=100,
+            response_tokens=50,
+            includes_image=False
+        )
+        
+        assert cost > cost_without_image
 
     def test_track_gemini_usage_token_only_cost(self, tracker):
         """Test tracking with only token costs."""
@@ -95,6 +151,13 @@ class TestTrackGeminiUsage:
         
         assert cost == expected_cost
         assert tracker.session_costs[0]["includes_image"] is True
+
+    def test_zero_token_usage(self, cost_tracker):
+        """Test handling of zero tokens."""
+        cost = cost_tracker.track_gemini_usage(0, 0, False)
+        
+        assert cost == 0.0
+        assert len(cost_tracker.session_costs) == 1  # Should still record
 
     def test_track_gemini_usage_zero_tokens(self, tracker):
         """Test tracking with zero tokens."""
@@ -195,14 +258,68 @@ class TestTrackGeminiUsage:
         parsed_time = datetime.fromisoformat(timestamp)
         assert isinstance(parsed_time, datetime)
 
+    def test_large_token_usage(self, cost_tracker):
+        """Test handling of large token counts."""
+        cost = cost_tracker.track_gemini_usage(10000, 5000, True)
+        
+        assert isinstance(cost, (int, float))
+        assert cost > 0
+        
+        record = cost_tracker.session_costs[0]
+        assert record["prompt_tokens"] == 10000
+        assert record["response_tokens"] == 5000
+
+    def test_track_gemini_usage_negative_tokens(self, tracker):
+        """Test handling of negative token counts."""
+        # The implementation only processes positive token counts
+        cost = tracker.track_gemini_usage(
+            prompt_tokens=-100,
+            response_tokens=-50
+        )
+        
+        # Should result in zero cost (negative tokens are ignored)
+        assert cost == 0.0
+        assert len(tracker.session_costs) == 1
+
+    def test_track_gemini_usage_very_large_tokens(self, tracker):
+        """Test handling of very large token counts."""
+        cost = tracker.track_gemini_usage(
+            prompt_tokens=1000000,
+            response_tokens=500000,
+            includes_image=True
+        )
+        
+        assert cost > 0
+        assert isinstance(cost, (int, float))
+        assert len(tracker.session_costs) == 1
+
 
 class TestTrackTcgUsage:
     """Test TCG usage tracking functionality."""
 
     @pytest.fixture
+    def cost_tracker(self):
+        """Create CostTracker instance."""
+        return CostTracker()
+
+    @pytest.fixture
     def tracker(self):
         """Create a fresh CostTracker instance."""
         return CostTracker()
+
+    def test_track_tcg_usage_basic(self, cost_tracker):
+        """Test basic TCG usage tracking."""
+        # Check actual method signature
+        cost = cost_tracker.track_tcg_usage("search")
+        
+        # TCG API is free
+        assert cost == 0.0
+        
+        # Should record the usage
+        assert len(cost_tracker.session_costs) == 1
+        record = cost_tracker.session_costs[0]
+        assert record["service"] == "tcg_api"
+        assert record["operation"] == "search"
 
     def test_track_tcg_usage_default_operation(self, tracker):
         """Test tracking TCG usage with default operation."""
@@ -252,14 +369,53 @@ class TestTrackTcgUsage:
         operations = [record["operation"] for record in tracker.session_costs]
         assert operations == ["search", "get_card", "search"]
 
+    def test_operations_with_none_values(self, tracker):
+        """Test operations with None values where applicable."""
+        # track_tcg_usage should handle None gracefully
+        cost = tracker.track_tcg_usage(None)
+        
+        # Should default to "search" or handle None appropriately
+        assert cost == 0.0
+        assert len(tracker.session_costs) == 1
+
 
 class TestSessionSummary:
     """Test session summary functionality."""
 
     @pytest.fixture
+    def cost_tracker(self):
+        """Create CostTracker instance."""
+        return CostTracker()
+
+    @pytest.fixture
     def tracker(self):
         """Create a fresh CostTracker instance."""
         return CostTracker()
+
+    def test_get_session_summary_structure(self, cost_tracker):
+        """Test session summary returns correct structure."""
+        summary = cost_tracker.get_session_summary()
+        
+        # Check basic structure
+        assert isinstance(summary, dict)
+        assert "session_start" in summary
+        assert "total_requests" in summary
+        assert "total_cost_usd" in summary
+        
+        # Should handle empty session
+        assert summary["total_requests"] == 0
+        assert summary["total_cost_usd"] == 0
+
+    def test_session_summary_with_data(self, cost_tracker):
+        """Test session summary with actual data."""
+        # Add some usage
+        cost_tracker.track_gemini_usage(100, 50, True)
+        cost_tracker.track_tcg_usage("search")
+        
+        summary = cost_tracker.get_session_summary()
+        
+        assert summary["total_requests"] == 2
+        assert summary["total_cost_usd"] > 0  # Should have some cost from Gemini
 
     def test_get_session_summary_empty(self, tracker):
         """Test session summary with no usage."""
@@ -364,14 +520,42 @@ class TestSessionSummary:
         
         assert summary["estimated_monthly_cost"] == 0
 
+    def test_get_session_summary_with_zero_costs(self, tracker):
+        """Test session summary when all costs are zero."""
+        tracker.track_tcg_usage("search")
+        tracker.track_tcg_usage("get_card")
+        
+        summary = tracker.get_session_summary()
+        
+        assert summary["total_cost_usd"] == 0.0
+        assert summary["average_cost_per_request"] == 0.0
+        assert summary["total_requests"] == 2
+
 
 class TestResetSession:
     """Test session reset functionality."""
 
     @pytest.fixture
+    def cost_tracker(self):
+        """Create CostTracker instance."""
+        return CostTracker()
+
+    @pytest.fixture
     def tracker(self):
         """Create a fresh CostTracker instance."""
         return CostTracker()
+
+    def test_reset_session(self, cost_tracker):
+        """Test session reset."""
+        # Add some data
+        cost_tracker.track_gemini_usage(100, 50)
+        
+        assert len(cost_tracker.session_costs) == 1
+        
+        # Reset
+        cost_tracker.reset_session()
+        
+        assert len(cost_tracker.session_costs) == 0
 
     def test_reset_session_clears_costs(self, tracker):
         """Test that reset clears session costs."""
@@ -411,14 +595,38 @@ class TestResetSession:
         
         mock_logger.info.assert_called_once_with("Cost tracking session reset")
 
+    def test_multiple_resets(self, tracker):
+        """Test multiple consecutive resets."""
+        tracker.track_gemini_usage(100, 50)
+        tracker.reset_session()
+        tracker.reset_session()
+        tracker.reset_session()
+        
+        assert len(tracker.session_costs) == 0
+
 
 class TestEstimateScanCost:
     """Test scan cost estimation functionality."""
 
     @pytest.fixture
+    def cost_tracker(self):
+        """Create CostTracker instance."""
+        return CostTracker()
+
+    @pytest.fixture
     def tracker(self):
         """Create a fresh CostTracker instance."""
         return CostTracker()
+
+    def test_estimate_scan_cost(self, cost_tracker):
+        """Test scan cost estimation."""
+        # This should work based on the actual implementation
+        estimate = cost_tracker.estimate_scan_cost(use_image=True)
+        
+        assert isinstance(estimate, dict)
+        assert "total_cost" in estimate
+        assert "token_cost" in estimate
+        assert "image_cost" in estimate
 
     def test_estimate_scan_cost_with_image(self, tracker):
         """Test cost estimation with image processing."""
@@ -499,65 +707,3 @@ class TestEstimateScanCost:
         # With image should cost more due to image processing
         assert with_image["total_cost"] > without_image["total_cost"]
         assert with_image["image_cost"] > without_image["image_cost"]
-
-
-class TestCostTrackerEdgeCases:
-    """Test edge cases and error conditions."""
-
-    @pytest.fixture
-    def tracker(self):
-        """Create a fresh CostTracker instance."""
-        return CostTracker()
-
-    def test_track_gemini_usage_negative_tokens(self, tracker):
-        """Test handling of negative token counts."""
-        # The implementation only processes positive token counts
-        cost = tracker.track_gemini_usage(
-            prompt_tokens=-100,
-            response_tokens=-50
-        )
-        
-        # Should result in zero cost (negative tokens are ignored)
-        assert cost == 0.0
-        assert len(tracker.session_costs) == 1
-
-    def test_track_gemini_usage_very_large_tokens(self, tracker):
-        """Test handling of very large token counts."""
-        cost = tracker.track_gemini_usage(
-            prompt_tokens=1000000,
-            response_tokens=500000,
-            includes_image=True
-        )
-        
-        assert cost > 0
-        assert isinstance(cost, (int, float))
-        assert len(tracker.session_costs) == 1
-
-    def test_get_session_summary_with_zero_costs(self, tracker):
-        """Test session summary when all costs are zero."""
-        tracker.track_tcg_usage("search")
-        tracker.track_tcg_usage("get_card")
-        
-        summary = tracker.get_session_summary()
-        
-        assert summary["total_cost_usd"] == 0.0
-        assert summary["average_cost_per_request"] == 0.0
-        assert summary["total_requests"] == 2
-
-    def test_multiple_resets(self, tracker):
-        """Test multiple consecutive resets."""
-        tracker.track_gemini_usage(100, 50)
-        tracker.reset_session()
-        tracker.reset_session()
-        tracker.reset_session()
-        
-        assert len(tracker.session_costs) == 0
-
-    def test_operations_with_none_values(self, tracker):
-        """Test operations with None values where applicable."""
-        # track_tcg_usage should handle None gracefully
-        cost = tracker.track_tcg_usage(None)
-        
-        # Should default to "search" or handle None appropriately
-        assert cost == 0.0
-        assert len(tracker.session_costs) == 1

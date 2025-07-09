@@ -1,4 +1,4 @@
-"""Extended tests for metrics_service.py to achieve higher coverage."""
+"""Comprehensive tests for metrics_service.py - consolidated from simple and extended tests."""
 
 import pytest
 from datetime import datetime, timedelta
@@ -136,6 +136,14 @@ class TestMetricsServiceInitialization:
         assert service._hourly_metrics is not None
         assert len(service._hourly_metrics) == 0
 
+    def test_initialization_basic(self):
+        """Test basic MetricsService initialization."""
+        metrics_service = MetricsService()
+        assert hasattr(metrics_service, 'metrics')
+        assert hasattr(metrics_service, 'recent_requests')
+        assert hasattr(metrics_service, 'response_times')
+        assert isinstance(metrics_service.metrics, object)
+
     def test_metrics_service_singleton_pattern(self):
         """Test that get_metrics_service returns the same instance."""
         service1 = get_metrics_service()
@@ -152,6 +160,28 @@ class TestRecordRequest:
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
+
+    def test_record_request_method_basic(self, service):
+        """Test record_request method."""
+        from datetime import datetime
+        from src.scanner.services.metrics_service import RequestMetrics
+        
+        # Create test request metrics
+        request_metrics = RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/scan",
+            method="POST",
+            status_code=200,
+            processing_time_ms=100.0
+        )
+        
+        # Record the request
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            service.record_request(request_metrics)
+            
+            # Should update metrics
+            assert service.metrics.total_requests == 1
+            assert service.metrics.successful_requests == 1
 
     @patch('src.scanner.services.metrics_service.config')
     def test_record_request_successful(self, mock_config, service):
@@ -357,6 +387,47 @@ class TestRecordRequest:
         assert service.metrics.errors_by_type["invalid_input"] == 2
         assert service.metrics.errors_by_type["image_quality_too_low"] == 1
 
+    @patch('src.scanner.services.metrics_service.config')
+    def test_record_request_with_zero_cost(self, mock_config, service):
+        """Test recording request with zero cost."""
+        mock_config.enable_metrics = True
+        
+        request_metrics = RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/v1/scan",
+            method="POST",
+            status_code=200,
+            processing_time_ms=100.0,
+            gemini_cost=0.0
+        )
+        
+        service.record_request(request_metrics)
+        
+        assert service.metrics.total_cost_usd == 0.0
+
+    @patch('src.scanner.services.metrics_service.config')
+    def test_record_request_with_none_values(self, mock_config, service):
+        """Test recording request with None values."""
+        mock_config.enable_metrics = True
+        
+        request_metrics = RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/v1/scan",
+            method="POST",
+            status_code=200,
+            processing_time_ms=100.0,
+            image_size_bytes=None,
+            gemini_cost=None,
+            tcg_matches=None
+        )
+        
+        service.record_request(request_metrics)
+        
+        # Should handle None values gracefully
+        assert service.metrics.total_requests == 1
+        assert service.metrics.images_processed == 0
+        assert service.metrics.total_cost_usd == 0.0
+
 
 class TestCacheMetrics:
     """Test cache-related metrics methods."""
@@ -365,6 +436,16 @@ class TestCacheMetrics:
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
+
+    def test_record_cache_hit_method(self, service):
+        """Test record_cache_hit method."""
+        initial_hits = service.metrics.cache_hits
+        
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            service.record_cache_hit()
+            
+            # Should increment cache hits
+            assert service.metrics.cache_hits == initial_hits + 1
 
     @patch('src.scanner.services.metrics_service.config')
     def test_record_cache_hit(self, mock_config, service):
@@ -376,6 +457,16 @@ class TestCacheMetrics:
         
         assert service.metrics.cache_hits == 2
         assert service.metrics.cache_misses == 0
+
+    def test_record_cache_miss_method(self, service):
+        """Test record_cache_miss method."""
+        initial_misses = service.metrics.cache_misses
+        
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            service.record_cache_miss()
+            
+            # Should increment cache misses
+            assert service.metrics.cache_misses == initial_misses + 1
 
     @patch('src.scanner.services.metrics_service.config')
     def test_record_cache_miss(self, mock_config, service):
@@ -408,6 +499,19 @@ class TestGetCurrentMetrics:
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
+
+    def test_get_current_metrics_method(self, service):
+        """Test get_current_metrics method."""
+        # Get current metrics
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            metrics = service.get_current_metrics()
+        
+        assert isinstance(metrics, dict)
+        assert 'requests' in metrics
+        assert 'total' in metrics['requests']
+        assert 'successful' in metrics['requests']
+        assert 'failed' in metrics['requests']
+        assert 'uptime_seconds' in metrics
 
     @patch('src.scanner.services.metrics_service.config')
     def test_get_current_metrics_disabled(self, mock_config, service):
@@ -538,6 +642,20 @@ class TestGetCurrentMetrics:
         assert metrics["api_usage"]["avg_cost_per_request"] == 0
         assert metrics["image_processing"]["avg_size_mb"] == 0
 
+    @patch('src.scanner.services.metrics_service.config')
+    def test_get_current_metrics_with_zero_duration(self, mock_config, service):
+        """Test getting metrics with very short duration."""
+        mock_config.enable_metrics = True
+        
+        # Force start time to be very recent
+        service.metrics.start_time = datetime.now()
+        
+        metrics = service.get_current_metrics()
+        
+        # Should not crash with division by zero
+        assert "uptime_seconds" in metrics
+        assert metrics["uptime_seconds"] >= 0
+
 
 class TestGetHourlyMetrics:
     """Test the get_hourly_metrics method."""
@@ -546,6 +664,16 @@ class TestGetHourlyMetrics:
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
+
+    def test_get_hourly_metrics_method(self, service):
+        """Test get_hourly_metrics method."""
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            hourly_metrics = service.get_hourly_metrics()
+        
+        assert isinstance(hourly_metrics, dict)
+        assert 'hours' in hourly_metrics
+        assert 'total_hours' in hourly_metrics
+        assert isinstance(hourly_metrics['hours'], list)
 
     @patch('src.scanner.services.metrics_service.config')
     def test_get_hourly_metrics_disabled(self, mock_config, service):
@@ -617,6 +745,31 @@ class TestGetRecentRequests:
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
+
+    def test_get_recent_requests_method(self, service):
+        """Test get_recent_requests method."""
+        from datetime import datetime
+        from src.scanner.services.metrics_service import RequestMetrics
+        
+        # Add a recent request
+        request_metrics = RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/scan",
+            method="POST",
+            status_code=200,
+            processing_time_ms=50.0
+        )
+        
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            service.record_request(request_metrics)
+            
+            # Get recent requests
+            recent = service.get_recent_requests(limit=5)
+            
+            assert isinstance(recent, dict)
+            assert 'requests' in recent
+            assert 'total_recent' in recent
+            assert isinstance(recent['requests'], list)
 
     @patch('src.scanner.services.metrics_service.config')
     def test_get_recent_requests_disabled(self, mock_config, service):
@@ -702,6 +855,30 @@ class TestResetMetrics:
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
+
+    def test_reset_metrics_method(self, service):
+        """Test reset_metrics method."""
+        from datetime import datetime
+        from src.scanner.services.metrics_service import RequestMetrics
+        
+        # Add some metrics first
+        request_metrics = RequestMetrics(
+            timestamp=datetime.now(),
+            endpoint="/api/scan",
+            method="POST",
+            status_code=200,
+            processing_time_ms=100.0
+        )
+        
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            service.record_request(request_metrics)
+            
+            # Reset metrics
+            service.reset_metrics()
+            
+            # Should be reset
+            assert service.metrics.total_requests == 0
+            assert len(service.recent_requests) == 0
 
     @patch('src.scanner.services.metrics_service.config')
     def test_reset_metrics(self, mock_config, service):
@@ -825,65 +1002,141 @@ class TestUpdateResponseTimes:
         assert service.response_times[0] == 5.0  # First 5 should be removed
 
 
-class TestMetricsServiceEdgeCases:
-    """Test edge cases and error conditions."""
+class TestResponseTimeTracking:
+    """Test response time tracking functionality."""
 
     @pytest.fixture
     def service(self):
         """Create a fresh MetricsService instance."""
         return MetricsService()
 
-    @patch('src.scanner.services.metrics_service.config')
-    def test_record_request_with_zero_cost(self, mock_config, service):
-        """Test recording request with zero cost."""
-        mock_config.enable_metrics = True
+    def test_response_time_tracking(self, service):
+        """Test response time tracking."""
+        from datetime import datetime
+        from src.scanner.services.metrics_service import RequestMetrics
         
-        request_metrics = RequestMetrics(
-            timestamp=datetime.now(),
-            endpoint="/api/v1/scan",
-            method="POST",
-            status_code=200,
-            processing_time_ms=100.0,
-            gemini_cost=0.0
-        )
+        # Record multiple requests with different response times
+        times = [50.0, 100.0, 150.0, 200.0]
         
-        service.record_request(request_metrics)
-        
-        assert service.metrics.total_cost_usd == 0.0
+        with patch('src.scanner.services.metrics_service.config.enable_metrics', True):
+            for time_ms in times:
+                request_metrics = RequestMetrics(
+                    timestamp=datetime.now(),
+                    endpoint="/api/scan",
+                    method="POST",
+                    status_code=200,
+                    processing_time_ms=time_ms
+                )
+                service.record_request(request_metrics)
+            
+            # Check response time stats
+            current = service.get_current_metrics()
+            assert 'response_times_ms' in current
+            assert current['response_times_ms']['average'] > 0
+            assert current['response_times_ms']['minimum'] == 50.0
+            assert current['response_times_ms']['maximum'] == 200.0
 
-    @patch('src.scanner.services.metrics_service.config')
-    def test_record_request_with_none_values(self, mock_config, service):
-        """Test recording request with None values."""
-        mock_config.enable_metrics = True
-        
-        request_metrics = RequestMetrics(
-            timestamp=datetime.now(),
-            endpoint="/api/v1/scan",
-            method="POST",
-            status_code=200,
-            processing_time_ms=100.0,
-            image_size_bytes=None,
-            gemini_cost=None,
-            tcg_matches=None
-        )
-        
-        service.record_request(request_metrics)
-        
-        # Should handle None values gracefully
-        assert service.metrics.total_requests == 1
-        assert service.metrics.images_processed == 0
-        assert service.metrics.total_cost_usd == 0.0
 
-    @patch('src.scanner.services.metrics_service.config')
-    def test_get_current_metrics_with_zero_duration(self, mock_config, service):
-        """Test getting metrics with very short duration."""
-        mock_config.enable_metrics = True
-        
-        # Force start time to be very recent
-        service.metrics.start_time = datetime.now()
-        
-        metrics = service.get_current_metrics()
-        
-        # Should not crash with division by zero
-        assert "uptime_seconds" in metrics
-        assert metrics["uptime_seconds"] >= 0
+class TestMetricsServiceOptionalMethods:
+    """Test optional methods that may exist in MetricsService."""
+
+    @pytest.fixture
+    def service(self):
+        """Create a fresh MetricsService instance."""
+        return MetricsService()
+
+    def test_record_gauge_method(self, service):
+        """Test record_gauge method if it exists."""
+        if hasattr(service, 'record_gauge'):
+            service.record_gauge('test_gauge', 42.5)
+            assert 'test_gauge' in service._metrics
+            assert service._metrics['test_gauge'] == 42.5
+
+    def test_record_histogram_method(self, service):
+        """Test record_histogram method if it exists."""
+        if hasattr(service, 'record_histogram'):
+            service.record_histogram('test_histogram', 100)
+            # Should store histogram data somehow
+            assert isinstance(service._metrics, dict)
+
+    def test_track_request_method(self, service):
+        """Test track_request method if it exists."""
+        if hasattr(service, 'track_request'):
+            result = service.track_request(
+                endpoint='/api/scan',
+                method='POST',
+                status_code=200,
+                duration=0.5
+            )
+            # Should track request metrics
+            metrics = service.get_metrics()
+            assert len(metrics) > 0
+
+    def test_track_error_method(self, service):
+        """Test track_error method if it exists."""
+        if hasattr(service, 'track_error'):
+            service.track_error(
+                error_type='ValidationError',
+                endpoint='/api/scan'
+            )
+            metrics = service.get_metrics()
+            # Should have error metrics
+            assert len(metrics) > 0
+
+    def test_get_uptime_method(self, service):
+        """Test get_uptime method if it exists."""
+        if hasattr(service, 'get_uptime'):
+            uptime = service.get_uptime()
+            assert isinstance(uptime, (int, float))
+            assert uptime >= 0
+
+    def test_metrics_with_labels(self, service):
+        """Test metrics with labels if supported."""
+        if hasattr(service, 'increment_counter_with_labels'):
+            service.increment_counter_with_labels(
+                'labeled_counter',
+                value=1,
+                labels={'endpoint': '/api/scan', 'method': 'POST'}
+            )
+            metrics = service.get_metrics()
+            assert len(metrics) > 0
+
+    def test_health_check_metrics(self, service):
+        """Test health check related metrics if they exist."""
+        if hasattr(service, 'record_health_check'):
+            service.record_health_check(healthy=True)
+            metrics = service.get_metrics()
+            # Should have some health-related metrics
+            assert isinstance(metrics, dict)
+
+    def test_performance_metrics(self, service):
+        """Test performance tracking methods if they exist."""
+        if hasattr(service, 'start_timer'):
+            timer = service.start_timer('operation')
+            # Simulate some work
+            import time
+            time.sleep(0.01)
+            if hasattr(timer, 'stop'):
+                timer.stop()
+            
+            metrics = service.get_metrics()
+            assert isinstance(metrics, dict)
+
+    def test_batch_increment(self, service):
+        """Test batch increment functionality if available."""
+        if hasattr(service, 'batch_increment'):
+            service.batch_increment({
+                'metric1': 10,
+                'metric2': 20,
+                'metric3': 30
+            })
+            
+            metrics = service.get_metrics()
+            assert metrics.get('metric1') == 10
+            assert metrics.get('metric2') == 20
+            assert metrics.get('metric3') == 30
+
+    def test_metrics_service_string_representation(self, service):
+        """Test metrics service string representation."""
+        str_repr = str(service)
+        assert isinstance(str_repr, str)

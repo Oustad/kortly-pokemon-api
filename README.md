@@ -414,7 +414,6 @@ The Pokemon Card Scanner is a production-ready **internal microservice** that us
 
 ### Unit Tests
 
-The project includes a comprehensive test suite with 247+ tests covering all major components.
 
 ```bash
 # Run all tests
@@ -428,12 +427,10 @@ uv run pytest -v
 
 ```
 
-**Coverage Reports:**
-- Terminal: Displays coverage percentage and missing line numbers after test run
 
 ### Accuracy Testing
 
-Test the scanner's accuracy against real Pokemon card images:
+Test the scanner's accuracy against Pokemon card images:
 
 ```bash
 # Test with image directory
@@ -825,7 +822,3 @@ The following settings are hardcoded for stability:
 - **[Google Gemini API Documentation](https://ai.google.dev/)** - AI service documentation
 - **[Google Cloud Run Documentation](https://cloud.google.com/run/docs)** - Deployment platform guide
 - **[FastAPI Documentation](https://fastapi.tiangolo.com/)** - Web framework reference
-
----
-
-*Last updated: 2025-07-08*
