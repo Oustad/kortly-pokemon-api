@@ -5,11 +5,9 @@ import logging
 import re
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
 
 from ..config import get_config
 from ..models.schemas import (
@@ -951,97 +949,3 @@ async def scan_pokemon_card(request: ScanRequest):
 
         # Handle unexpected error with proper error response
         handle_unexpected_error(e, context="card_scan")
-
-
-@router.get("/processed-images/list")
-async def list_processed_images():
-    """
-    List all processed images for testing purposes.
-
-    Returns a list of available processed images with metadata.
-    """
-    try:
-        processed_dir = Path("processed_images")
-        if not processed_dir.exists():
-            return {"images": []}
-
-        images = []
-        for image_file in processed_dir.glob("*.jpg"):
-            try:
-                stat = image_file.stat()
-                # Parse filename to extract info
-                parts = image_file.stem.split('_')
-                if len(parts) >= 3:
-                    name = '_'.join(parts[:-2])  # Everything except stage and timestamp
-                    stage = parts[-2]
-                    timestamp = parts[-1]
-                else:
-                    name = image_file.stem
-                    stage = "unknown"
-                    timestamp = ""
-
-                images.append({
-                    "filename": image_file.name,
-                    "path": str(image_file),
-                    "url": f"/api/v1/processed-images/{image_file.name}",
-                    "size": stat.st_size,
-                    "modified": stat.st_mtime,
-                    "stage": stage,
-                    "original_name": name,
-                    "timestamp": timestamp,
-                })
-            except Exception as e:
-                logger.warning(f"Error processing image file {image_file}: {e}")
-                continue
-
-        # Sort by modification time, newest first
-        images.sort(key=lambda x: x["modified"], reverse=True)
-
-        return {"images": images}
-
-    except Exception as e:
-        handle_unexpected_error(e, context="listing_processed_images")
-
-
-@router.get("/processed-images/{filename}")
-async def get_processed_image(filename: str):
-    """
-    Serve a processed image file.
-
-    Args:
-        filename: Name of the image file to serve
-
-    Returns:
-        The image file
-    """
-    try:
-        processed_dir = Path("processed_images")
-        file_path = processed_dir / filename
-
-        if not file_path.exists() or not file_path.is_file():
-            from ..services.error_handler import ErrorDetails, ErrorType
-            error_details = ErrorDetails(
-                error_type=ErrorType.NO_CARD_FOUND,
-                message="Image not found"
-            )
-            raise_pokemon_scanner_error(error_details)
-
-        # Verify it's actually an image file
-        if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-            from ..services.error_handler import ErrorDetails, ErrorType
-            error_details = ErrorDetails(
-                error_type=ErrorType.UNSUPPORTED_FORMAT,
-                message="Invalid image file type"
-            )
-            raise_pokemon_scanner_error(error_details)
-
-        return FileResponse(
-            path=str(file_path),
-            media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=3600"}
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        handle_unexpected_error(e, context="serving_processed_image")

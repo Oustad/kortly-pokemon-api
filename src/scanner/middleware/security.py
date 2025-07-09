@@ -140,10 +140,3 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers[header] = value
         
         return response
-
-
-def cleanup_rate_limit_data():
-    """Periodic cleanup function for rate limit data."""
-    # This would be called by a background task in production
-    # For now, cleanup happens on each request
-    pass
